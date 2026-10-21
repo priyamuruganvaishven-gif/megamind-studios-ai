@@ -1,28 +1,3 @@
-From 1c201f845ddee0a110b52a66aefbf2a07f6dbdb3 Mon Sep 17 00:00:00 2001
-From: Megamind <megamind@local>
-Date: Wed, 21 Oct 2026 11:22:44 +0530
-Subject: [PATCH] Megamind Studios: name, white/orange/black theme, curated
- model selection, Windows setup
-
----
- megamind/MEGAMIND.md                 | 22 +++++++++++++++
- megamind/apply_patch.sh              | 17 +++++++++++
- megamind/curate_models.py            | 25 +++++++++++++++++
- megamind/wgp_config.template.json    | 20 +++++++++++++
- run_megamind_windows.bat             | 10 +++++++
- setup_megamind_windows.bat           | 42 ++++++++++++++++++++++++++++
- shared/gradio/ui_studio.py           | 11 +++++---
- shared/gradio/ui_studio_megamind.css | 18 ++++++++++++
- wgp.py                               |  6 ++--
- 9 files changed, 164 insertions(+), 7 deletions(-)
- create mode 100644 megamind/MEGAMIND.md
- create mode 100755 megamind/apply_patch.sh
- create mode 100644 megamind/curate_models.py
- create mode 100644 megamind/wgp_config.template.json
- create mode 100644 run_megamind_windows.bat
- create mode 100644 setup_megamind_windows.bat
- create mode 100644 shared/gradio/ui_studio_megamind.css
-
 diff --git a/megamind/MEGAMIND.md b/megamind/MEGAMIND.md
 new file mode 100644
 index 0000000..100cc96
@@ -51,29 +26,6 @@ index 0000000..100cc96
 +white-labeling, hosted/paid access or redistribution as a product - those remain
 +restricted by the WanGP Community License 2.0. "Made with WanGP" credit is required
 +for Direct Output Sales (license section 6).
-diff --git a/megamind/apply_patch.sh b/megamind/apply_patch.sh
-new file mode 100755
-index 0000000..07ad27e
---- /dev/null
-+++ b/megamind/apply_patch.sh
-@@ -0,0 +1,17 @@
-+#!/usr/bin/env bash
-+# Reapply the Megamind Studios v1 patch onto a fresh Wan2GP clone.
-+# Pins the verified upstream commit; refuses to apply onto anything else.
-+set -e
-+PINNED_COMMIT=fdc63bd
-+PINNED_SUBJECT="fixed audio continuity"
-+if [ ! -d .git ] || [ ! -f wgp.py ]; then
-+  echo "Run this inside a Wan2GP clone (git clone https://github.com/deepbeepmeep/Wan2GP)"; exit 1
-+fi
-+current=$(git rev-parse --short HEAD)
-+if [ "$current" != "$PINNED_COMMIT" ]; then
-+  echo "This patch is verified against Wan2GP commit $PINNED_COMMIT ('$PINNED_SUBJECT')."
-+  echo "Current HEAD is $current. Run: git checkout $PINNED_COMMIT  (or review the patch manually)."
-+  exit 1
-+fi
-+git apply --check "$(dirname "$0")/megamind-v1.patch" && git apply "$(dirname "$0")/megamind-v1.patch"
-+echo "Megamind patch applied cleanly onto $PINNED_COMMIT."
 diff --git a/megamind/curate_models.py b/megamind/curate_models.py
 new file mode 100644
 index 0000000..cd5ed1c
@@ -134,7 +86,7 @@ index 0000000..013e094
 \ No newline at end of file
 diff --git a/run_megamind_windows.bat b/run_megamind_windows.bat
 new file mode 100644
-index 0000000..1522f15
+index 0000000..0b6c368
 --- /dev/null
 +++ b/run_megamind_windows.bat
 @@ -0,0 +1,10 @@
@@ -197,7 +149,7 @@ index 0000000..64fd22c
 +echo [Megamind] Then open the shown local address in your browser.
 +pause
 diff --git a/shared/gradio/ui_studio.py b/shared/gradio/ui_studio.py
-index 5494571..ee176bf 100644
+index 5494571..5672c4f 100644
 --- a/shared/gradio/ui_studio.py
 +++ b/shared/gradio/ui_studio.py
 @@ -7,17 +7,20 @@ from urllib.parse import quote
@@ -216,7 +168,7 @@ index 5494571..ee176bf 100644
      if name == 'gradio':
          return None
 -    theme = gr.themes.Soft(font=[gr.themes.Font('Verdana')], primary_hue=THEME_HUES[name], secondary_hue=AZURE if name == 'default' else 'indigo', neutral_hue='slate', **sizes)
-+    theme = gr.themes.Soft(font=[gr.themes.Font('Verdana')], primary_hue=THEME_HUES[name], secondary_hue=AZURE if name == 'default' else (MEGAORANGE if name == 'megamind' else 'indigo'), neutral_hue='stone', **sizes)
++    theme = gr.themes.Soft(font=[gr.themes.Font('Verdana')], primary_hue=THEME_HUES[name], secondary_hue=AZURE if name == 'default' else (MEGAORANGE if name == 'megamind' else 'indigo'), neutral_hue='stone' if name == 'megamind' else 'slate', **sizes)
      if name == 'default':
          theme.set(background_fill_primary='*neutral_50', slider_color_dark='*primary_400', checkbox_label_background_fill_selected='*primary_600')
 +    if name == 'megamind':
@@ -281,5 +233,3 @@ index 2b23320..be0e7f5 100644
          global model_list
  
          tab_state = gr.State({ "tab_no":0 }) 
--- 
-2.34.1
