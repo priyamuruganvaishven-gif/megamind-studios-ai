@@ -49,7 +49,7 @@ echo '{"model":{"visible":false}}' > finetunes/t2v_1.3B.json   # stale stub from
 missing=0; visible=0
 for f in defaults/*.json; do
   mt=$(basename "$f" .json); stub="finetunes/$mt.json"
-  case "$mt" in t2v_1.3B|flux2_klein_4b|chatterbox|ace_step_v1_5)
+  case "$mt" in t2v_1.3B|ti2v_2_2|chatterbox|ace_step_v1_5)
     [ -f "$stub" ] && bad "allowlisted $mt got a hiding stub" || visible=$((visible+1));;
   *) { [ -f "$stub" ] && grep -q '"visible": false' "$stub"; } || { missing=$((missing+1)); bad "stub missing: $mt"; };;
   esac
@@ -60,7 +60,7 @@ done
 "$PY" - "$WORK/t1" <<'PYEOF' && ok "wgp_config.template.json valid" || bad "config template invalid"
 import json,sys
 c=json.load(open(sys.argv[1]+"/megamind/wgp_config.template.json"))
-assert c.get("transformer_types")==["t2v_1.3B","flux2_klein_4b","chatterbox","ace_step_v1_5"]
+assert c.get("transformer_types")==["t2v_1.3B","ti2v_2_2","chatterbox","ace_step_v1_5"]
 assert c.get("UI_theme")=="default", "megamind theme is gone (plugin replaced it); template must seed default"
 assert c.get("enabled_plugins")==["motion_designer","megamind"]
 assert c.get("last_model_type")=="t2v_1.3B"
@@ -131,35 +131,39 @@ PYEOF
 grep -q "fdc63bdf89358fb13c93cf6b38693fd89a859f00" "$APPLY_SH" \
   && ok "apply_patch.sh pins the full 40-char commit SHA" || bad "apply_patch.sh uses short SHA"
 
-# 12. GTX 1060 6GB seeds: int8 quants, low-VRAM profiles, auto attention
-"$PY" - "$WORK/t1" <<'PYEOF' && ok "template seeds GTX 1060 profile (int8 quants, profile 4/3, auto attention)" || bad "template GTX 1060 seeds wrong"
+# 12. GTX 1060 6GB seeds: 16-bit transformer (int8 quanto files are bf16-forced -> not Pascal-runnable), int8 encoder, low-VRAM profiles, auto attention
+"$PY" - "$WORK/t1" <<'PYEOF' && ok "template seeds GTX 1060 profile (16-bit transformer, int8 encoder, profile 4/3, auto attention)" || bad "template GTX 1060 seeds wrong"
 import json,sys
 c=json.load(open(sys.argv[1]+"/megamind/wgp_config.template.json"))
-assert c.get("transformer_quantization")=="int8", "transformer_quantization must be int8 (Pascal: no fp8 hardware)"
+assert c.get("transformer_quantization")=="bf16", "transformer_quantization must be 16-bit (bf16): int8 quanto checkpoints are bf16-named and WanGP forces bf16 compute for them (wgp.py:4229-4231) - not Pascal-runnable (Wan2GP #225)"
 assert c.get("text_encoder_quantization")=="int8"
 assert c.get("attention_mode")=="auto"
 assert c.get("profile")==4 and c.get("video_profile")==4 and c.get("image_profile")==4, "LowRAM_LowVRAM profile 4 required for 6GB"
 assert c.get("audio_profile")==3, "LowRAM_HighVRAM profile 3 is upstream-recommended for audio"
 PYEOF
 
-# 13. Curated models ship Pascal-runnable quant artifacts in pinned upstream (no fp8-only models)
-"$PY" - "$WORK/t1" <<'PYEOF' && ok "curated model artifacts Pascal-runnable (1.3B plain, klein/ace int8), none fp8-only" || bad "curated model quant artifacts wrong"
+# 13. Curated models: unquantized (non-quanto) checkpoint exists so the FP16 fallback can engage; Klein rejected (bf16-only loader)
+"$PY" - "$WORK/t1" <<'PYEOF' && ok "curated artifacts Pascal-runnable (unquantized FP16 route), Klein excluded for bf16-only pipeline" || bad "curated model artifacts wrong"
 import json,sys
 d=sys.argv[1]+"/defaults/"
 def urls(f): return json.load(open(d+f)).get("model",{}).get("URLs",[])
-t1=urls("t2v_1.3B.json");     assert len(t1)==1 and "1.3B" in t1[0], t1  # 1.3B runs unquantized FP16 on Pascal; no int8 variant exists
-kl=urls("flux2_klein_4b.json"); assert any("quanto" in u and "int8" in u for u in kl), kl
-ace=urls("ace_step_v1_5.json"); assert any("quanto" in u and "int8" in u for u in ace), ace
-cb=urls("chatterbox.json");     assert len(cb)==1, cb
-for name,u in [("t2v_1.3B",t1),("flux2_klein_4b",kl),("ace_step_v1_5",ace),("chatterbox",cb)]:
-    assert not all("fp8" in x for x in u), name+" is fp8-only - not Pascal-runnable"
+t1=urls("t2v_1.3B.json");  assert len(t1)==1 and "1.3B" in t1[0] and "quanto" not in t1[0], t1
+ti=urls("ti2v_2_2.json");  assert any("quanto" not in u for u in ti), ti   # unquantized 5B exists -> FP16 fallback route
+ace=urls("ace_step_v1_5.json"); assert any("quanto" not in u for u in ace), ace
+cb=urls("chatterbox.json");    assert len(cb)==1 and "quanto" not in cb[0], cb
+kl=urls("flux2_klein_4b.json"); assert kl, "Klein still shipped upstream (hidden by curation, not deleted)"
+# every curated pick must select a non-quanto file under 16-bit transformer_quantization="bf16" (choices[0])
+for name,u in [("t2v_1.3B",t1),("ti2v_2_2",ti),("ace_step_v1_5",ace),("chatterbox",cb)]:
+    assert "quanto" not in u[0], name+" first URL is quanto - 16-bit route broken"
 PYEOF
 
 # 14. Pinned upstream auto-falls back to FP16 on Pascal (sm < 8.0) and defaults to int8 quant
 grep -q 'if  gpu_major < 8:' "$WORK/t1/wgp.py" && grep -q 'bfloat16_supported = False' "$WORK/t1/wgp.py" \
   && ok "upstream auto FP16 fallback for Pascal present" || bad "upstream Pascal FP16 fallback missing"
 grep -q '"transformer_quantization": "int8"' "$WORK/t1/wgp.py" \
-  && ok "upstream default quantization is int8 (matches template)" || bad "upstream default quant changed"
+  && ok "upstream default quantization is int8 (template overrides to bf16 for Pascal)" || bad "upstream default quant changed"
+grep -q 'transformer_dtype = torch.bfloat16 if "bf16" in model_filename' "$WORK/t1/wgp.py" \
+  && ok "upstream bf16-forcing for quanto files present (justifies the 16-bit route)" || bad "upstream quanto dtype forcing changed - re-verify Pascal route"
 
 # 15. Existing-install config migration: seeds when absent, enforces GTX 10xx fields, preserves user settings, idempotent
 grep -qF 'python megamind\ensure_config.py' "$SB" && ok "setup.bat runs ensure_config.py migration" || bad "setup.bat missing config migration"
@@ -172,16 +176,16 @@ for f in ("ensure_config.py", "wgp_config.template.json"):
 run = lambda: subprocess.run([sys.executable, "megamind/ensure_config.py"], cwd=work, capture_output=True, text=True)
 cfgp = os.path.join(work, "wgp_config.json")
 r = run(); assert r.returncode == 0 and os.path.exists(cfgp), r.stderr
-c = json.load(open(cfgp)); assert c["transformer_quantization"] == "int8" and c["profile"] == 4
-c.update({"transformer_quantization": "fp8", "profile": 2, "image_profile": 1, "audio_profile": 5, "custom_key": "keep", "transformer_types": ["qwen_image_20B"], "last_model_type": "ti2v_2_2", "UI_theme": "megamind", "enabled_plugins": ["motion_designer"]})
+c = json.load(open(cfgp)); assert c["transformer_quantization"] == "bf16" and c["profile"] == 4
+c.update({"transformer_quantization": "fp8", "profile": 2, "image_profile": 1, "audio_profile": 5, "custom_key": "keep", "transformer_types": ["qwen_image_20B"], "last_model_type": "flux2_klein_4b", "UI_theme": "megamind", "enabled_plugins": ["motion_designer"]})
 json.dump(c, open(cfgp, "w"))
 r = run(); assert r.returncode == 0, r.stderr
 c = json.load(open(cfgp))
-assert c["transformer_quantization"] == "int8" and c["profile"] == 4 and c["image_profile"] == 4
+assert c["transformer_quantization"] == "bf16" and c["profile"] == 4 and c["image_profile"] == 4
 assert c["audio_profile"] == 5 and c["custom_key"] == "keep"
 assert c["UI_theme"] == "default", "stale megamind theme must migrate to default"
 assert c["enabled_plugins"] == ["motion_designer", "megamind"], "existing plugins must be preserved"
-assert c["transformer_types"] == ["t2v_1.3B", "flux2_klein_4b", "chatterbox", "ace_step_v1_5"]
+assert c["transformer_types"] == ["t2v_1.3B", "ti2v_2_2", "chatterbox", "ace_step_v1_5"]
 assert c["last_model_type"] == "t2v_1.3B", "stale last_model_type must migrate to the template default"
 assert "megamind" in c["enabled_plugins"], "migration must enable the megamind plugin"
 r = run(); assert "no changes" in r.stdout, r.stdout
