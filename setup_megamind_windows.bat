@@ -2,7 +2,7 @@
 REM ============================================================
 REM  Megamind Studios - one-step Windows setup
 REM  Downloads WanGP (pinned, verified commit), applies the
-REM  Megamind patch, installs the GTX 10xx build, curates the
+REM  Megamind add-on files and branding plugin, installs
 REM  model list. Needs ~25 GB free disk for the app; models
 REM  download separately on first use.
 REM  Line-ending safe: single-line conditionals only, no labels.
@@ -33,14 +33,15 @@ echo [Megamind] Checking out the verified WanGP version...
 git checkout %PINNED% >nul 2>&1
 if errorlevel 1 ( echo [Megamind] Could not check out %PINNED%. Report this to Megamind support. & pause & exit /b 1 )
 
-echo [Megamind] Applying the Megamind patch...
-set MM_APPLY=1
-if exist megamind\ensure_config.py findstr /C:"megamind_dark_lock_v2" shared\gradio\ui_studio.py >nul 2>&1 && set MM_APPLY=0
-if %MM_APPLY%==0 echo [Megamind] Latest Megamind patch already applied - skipping.
-if %MM_APPLY%==1 ( del /q shared\gradio\ui_studio_megamind.css 2>nul & rmdir /s /q megamind 2>nul & del /q run_megamind_windows.bat 2>nul & git reset --hard %PINNED% >nul 2>&1 & git apply "%~dp0megamind-v1.patch" )
-findstr /C:"megamind_dark_lock_v2" shared\gradio\ui_studio.py >nul 2>&1 || ( echo [Megamind] Patch update failed. Report this to Megamind support. & pause & exit /b 1 )
+echo [Megamind] Applying the Megamind add-on files...
+set MM_SKIP=0
+if exist megamind\ensure_config.py if exist plugins\megamind\plugin.py findstr /C:"Megamind Studios" wgp.py >nul 2>&1 || set MM_SKIP=1
+if %MM_SKIP%==1 echo [Megamind] Latest Megamind setup already applied - skipping.
+if %MM_SKIP%==0 ( del /q shared\gradio\ui_studio_megamind.css 2>nul & rmdir /s /q megamind 2>nul & rmdir /s /q plugins\megamind 2>nul & del /q run_megamind_windows.bat 2>nul & git reset --hard %PINNED% >nul 2>&1 & git apply "%~dp0megamind-v1.patch" )
 if not exist megamind\ensure_config.py ( echo [Megamind] Patch update failed. Report this to Megamind support. & pause & exit /b 1 )
-findstr /C:"Megamind Studios" wgp.py >nul || ( echo [Megamind] Patch verification failed. Report this to Megamind support. & pause & exit /b 1 )
+echo [Megamind] Installing the Megamind plugin ^(branding, rounded buttons, light/dark toggle^)...
+xcopy /E /I /Y "%~dp0megamind-plugin" "%WAN2GP_DIR%\plugins\megamind" >nul
+if not exist plugins\megamind\plugin.py ( echo [Megamind] Plugin install failed. Report this to Megamind support. & pause & exit /b 1 )
 
 if not exist venv %PYLAUNCH% -m venv venv
 call venv\Scripts\activate.bat
