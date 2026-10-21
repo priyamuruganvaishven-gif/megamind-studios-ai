@@ -40,7 +40,10 @@ findstr /C:"Megamind Studios" wgp.py >nul || ( echo [Megamind] Patch verificatio
 
 if not exist venv %PYLAUNCH% -m venv venv
 call venv\Scripts\activate.bat
-
+python -m pip install --upgrade pip
+pip install "typing-extensions>=4.10"
+REM typing-extensions preinstalled from PyPI: the cu128 index carries it as
+REM sdist-only and lacks its build backend, which breaks the torch install.
 echo [Megamind] Installing PyTorch 2.7.1 cu128 ^(GTX 10xx build^)...
 pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 if errorlevel 1 ( echo [Megamind] PyTorch install failed. Check your internet connection and rerun. & pause & exit /b 1 )
