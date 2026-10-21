@@ -49,7 +49,7 @@ jobs:
           Wan2GP\venv\Scripts\python.exe -c "import torch, torchvision, torchaudio; print('torch', torch.__version__, 'cuda_available:', torch.cuda.is_available())"
           Wan2GP\venv\Scripts\python.exe -c "import importlib.util, sys; assert importlib.util.find_spec('torchcodec') is None, 'torchcodec present but should be excluded for this profile'; print('torchcodec absent as intended (unused by WanGP at pinned commit; no Windows wheel for torch 2.7 path)')"
 
-      - name: App startup healthcheck (CI runner has no GPU - honest result either way)
+      - name: "App startup healthcheck (GPU-less CI - boundary classified, NOT a full-startup pass)"
         shell: pwsh
         run: |
           $env:PYTHONUNBUFFERED = "1"
@@ -59,7 +59,7 @@ jobs:
             Start-Sleep 5
             if ($p.HasExited) {
               $logs = (Get-Content app-out.log, app-err.log -Raw -ErrorAction SilentlyContinue) -join "`n"
-              if ($logs -match "Found no NVIDIA driver") {
+              if ($logs -match "Found no NVIDIA driver" -and $logs -match "attention\.py", "line 17") {
                 Write-Host "::notice::GPU-less boundary (expected on CI): WanGP exits at import - upstream shared/attention.py line 17 calls torch.cuda.get_device_capability with no CUDA guard. Everything up to the hardware boundary is verified; UI startup and generation require the user's NVIDIA GPU + driver."
                 $nodriver = $true
                 break
