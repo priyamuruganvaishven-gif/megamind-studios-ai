@@ -86,7 +86,7 @@ PYEOF
 
 # 8. setup.bat: Git + Python checks, pinned checkout, pinned torch stack, no launcher overwrite
 SB="$SCRIPT_DIR/setup_megamind_windows.bat"
-g() { grep -q "$1" "$SB"; }
+g() { grep -q -- "$1" "$SB"; }
 g "where git" && g "py -3.10" && g "checkout %PINNED%" \
   && g "torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1" \
   && g "findstr /V /I /C:" \
@@ -97,8 +97,8 @@ g 'xcopy /E /I /Y "%~dp0megamind-plugin"' && grep -qF 'plugins\megamind\plugin.p
   && ok "setup.bat installs the branding plugin (xcopy + verify)" || bad "setup.bat missing plugin install"
 g "pip install --upgrade pip" && g 'typing-extensions>=4.10' \
   && ok "setup.bat pre-installs typing-extensions from PyPI (cu128 index sdist trap, found by CI run 2)" || bad "setup.bat missing typing-extensions pre-install"
-g "whl/test/cu128" && g "sm_61" && grep -qF -- "--force-reinstall" "$SB" \
-  && ok "setup.bat installs Pascal-kernel torch (test/cu128 index + sm_61 arch check + force-reinstall)" || bad "setup.bat torch line not Pascal-safe"
+g "--index-url https://download.pytorch.org/whl/cu128" && ! grep -q "force-reinstall" "$SB" \
+  && ok "setup.bat keeps the binary-verified torch rail (stable cu128 Windows wheel contains sm_61; no unverified index switch)" || bad "setup.bat torch rail changed without evidence"
 if grep -q "^echo @echo off>" "$SB"; then bad "setup.bat overwrites the guarded launcher"; else ok "setup.bat preserves the guarded launcher"; fi
 
 # 9. Final installed launcher is the guarded one from the patch
