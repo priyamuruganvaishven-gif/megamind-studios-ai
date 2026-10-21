@@ -19,11 +19,17 @@ if errorlevel 1 (
 )
 py -3.10 --version >nul 2>&1
 if errorlevel 1 (
-    echo [Megamind] Python 3.10 not found.
-    echo [Megamind] Install Python 3.10.9 from https://www.python.org/downloads/release/python-3109/
-    echo [Megamind] During install tick "Add python.exe to PATH", then rerun this file.
-    pause
-    exit /b 1
+    python --version 2>nul | findstr /R "^Python 3\.10\." >nul
+    if errorlevel 1 (
+        echo [Megamind] Python 3.10 not found.
+        echo [Megamind] Install Python 3.10.9 from https://www.python.org/downloads/release/python-3109/
+        echo [Megamind] During install tick "Add python.exe to PATH", then rerun this file.
+        pause
+        exit /b 1
+    )
+    set PYLAUNCH=python
+) else (
+    set PYLAUNCH=py -3.10
 )
 
 if not exist "%WAN2GP_DIR%\.git" (
@@ -48,7 +54,7 @@ if errorlevel 1 (
 
 if not exist venv (
     echo [Megamind] Creating virtual environment...
-    py -3.10 -m venv venv
+    %PYLAUNCH% -m venv venv
 )
 call venv\Scripts\activate.bat
 
