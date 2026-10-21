@@ -40,7 +40,7 @@ fi
 
 # 3. apply_patch.sh APPLIES onto the pinned commit (real helper path)
 fresh "$WORK/t3" && cd "$WORK/t3" && git checkout -q -f $PINNED
-if bash "$APPLY_SH" "$PATCH" >/dev/null 2>&1 && grep -q "Megamind Studios" wgp.py; then ok "apply_patch.sh applies onto $PINNED"; else bad "apply_patch.sh failed onto $PINNED"; fi
+if bash "$APPLY_SH" "$PATCH" >/dev/null 2>&1 && [ -f megamind/ensure_config.py ]; then ok "apply_patch.sh applies onto $PINNED"; else bad "apply_patch.sh failed onto $PINNED"; fi
 
 # 4. Curation on the patched tree: 268 hidden, exactly 4 visible
 cd "$WORK/t1" && rm -rf finetunes && mkdir -p finetunes && "$PY" megamind/curate_models.py >/dev/null
@@ -59,26 +59,28 @@ done
 import json,sys
 c=json.load(open(sys.argv[1]+"/megamind/wgp_config.template.json"))
 assert c.get("transformer_types")==["ti2v_2_2","qwen_image_20B","chatterbox","ace_step_v1_5"]
-assert c.get("UI_theme")=="megamind" and c.get("last_model_type")=="ti2v_2_2"
+assert c.get("UI_theme")=="default", "megamind theme is gone (plugin replaced it); template must seed default"
+assert c.get("enabled_plugins")==["motion_designer","megamind"]
+assert c.get("last_model_type")=="ti2v_2_2"
 PYEOF
 
-# 6. Megamind theme builds; per-theme CSS wired (full build when gradio is installed, static wiring check otherwise)
-cd "$WORK/t1"
-if "$PY" -c "import gradio" 2>/dev/null; then
-  "$PY" - <<'PYEOF' && ok "megamind theme builds and CSS override file is wired" || bad "theme build failed"
-import sys; sys.path.insert(0,".")
-from shared.gradio import ui_studio
-t=ui_studio.create_theme("megamind"); assert t is not None
-import os; assert os.path.exists("shared/gradio/ui_studio_megamind.css")
-PYEOF
-else
-  grep -q "'megamind'" shared/gradio/ui_studio.py && [ -f shared/gradio/ui_studio_megamind.css ] \
-    && ok "megamind theme wired (static check; install gradio for full build test)" || bad "megamind theme wiring missing"
-fi
+# 6. Patch is add-only: no upstream file is modified (plugin replaced all core edits)
+cd "$WORK/t1" && git checkout -q -- . 2>/dev/null
+if [ -z "$(git status --porcelain | grep -v '^??')" ]; then ok "patch adds files only - zero upstream code changes"; else bad "patch modifies upstream files: $(git status --porcelain | grep -v '^??' | head -3)"; fi
 
-# 7. neutral_hue override is scoped to megamind; other themes keep slate
-grep -q "neutral_hue='stone' if name == 'megamind' else 'slate'" "$WORK/t1/shared/gradio/ui_studio.py" \
-  && ok "neutral_hue scoped to megamind (other themes keep slate)" || bad "neutral_hue change leaks into other themes"
+# 7. Branding plugin: files present, valid, wired through WanGP's plugin API
+PDIR="$SCRIPT_DIR/megamind-plugin"
+[ -f "$PDIR/plugin.py" ] && [ -f "$PDIR/plugin_info.json" ] && [ -f "$PDIR/__init__.py" ] \
+  && ok "plugin package present (plugin.py, plugin_info.json, __init__.py)" || bad "plugin package incomplete"
+"$PY" -c "import py_compile,sys; py_compile.compile(sys.argv[1], cfile='/tmp/mm_plugin_check.pyc', doraise=True)" "$PDIR/plugin.py" && ok "plugin.py compiles" || bad "plugin.py syntax error"
+"$PY" - "$PDIR" <<'PYEOF' && ok "plugin wiring: WAN2GPPlugin subclass, add_custom_js, logo, light/dark toggle, pill tabs" || bad "plugin wiring markers missing"
+import json,sys
+d=sys.argv[1]
+info=json.load(open(d+"/plugin_info.json")); assert info.get("name"), info
+src=open(d+"/plugin.py",encoding="utf-8").read()
+for marker in ("WAN2GPPlugin","add_custom_js","document.title","Megamind Studios","data:image","mm-mode","megamind_mode","mm-dark","tab-container","role=tab"):
+    assert marker in src, marker
+PYEOF
 
 # 8. setup.bat: Git + Python checks, pinned checkout, pinned torch stack, no launcher overwrite
 SB="$SCRIPT_DIR/setup_megamind_windows.bat"
@@ -89,6 +91,8 @@ g "where git" && g "py -3.10" && g "checkout %PINNED%" \
   && g 'requirements_megamind.txt' \
   && ok "setup.bat: git/python checks, pinned checkout, pinned torch stack, torchcodec excluded (documented)" || bad "setup.bat missing required logic"
 if grep -q "torchcodec==0.5.0" "$SB"; then bad "setup.bat pins torchcodec 0.5.0 (no Windows wheel exists)"; else ok "setup.bat has no unshippable torchcodec pin"; fi
+g 'xcopy /E /I /Y "%~dp0megamind-plugin"' && grep -qF 'plugins\megamind\plugin.py' "$SB" \
+  && ok "setup.bat installs the branding plugin (xcopy + verify)" || bad "setup.bat missing plugin install"
 g "pip install --upgrade pip" && g 'typing-extensions>=4.10' \
   && ok "setup.bat pre-installs typing-extensions from PyPI (cu128 index sdist trap, found by CI run 2)" || bad "setup.bat missing typing-extensions pre-install"
 if grep -q "^echo @echo off>" "$SB"; then bad "setup.bat overwrites the guarded launcher"; else ok "setup.bat preserves the guarded launcher"; fi
@@ -100,8 +104,8 @@ grep -q "Setup not done yet" "$WORK/t1/run_megamind_windows.bat" \
 # 10. License and notices
 cmp -s "$WORK/t1/LICENSE.txt" "$SRC/LICENSE.txt" 2>/dev/null || diff <(git -C "$SRC" show $PINNED:LICENSE.txt) "$WORK/t1/LICENSE.txt" >/dev/null \
   && ok "LICENSE.txt intact" || bad "LICENSE.txt changed"
-grep -q 'title="Megamind Studios"' "$WORK/t1/wgp.py" && ! grep -qi "powered by" "$WORK/t1/wgp.py" \
-  && ok "header is Megamind-only, no powered-by" || bad "header check failed"
+grep -q 'document.title="Megamind Studios"' "$SCRIPT_DIR/megamind-plugin/plugin.py" \
+  && ok "plugin sets Megamind Studios title and logo header" || bad "plugin branding check failed"
 grep -q "WanGP Copyright DeepBeepMeep" "$WORK/t1/wgp.py" && grep -q "by DeepBeepMeep" "$WORK/t1/wgp.py" \
   && ok "upstream credits preserved in wgp.py" || bad "upstream credits missing"
 grep -Eq "20[0-9]{2}-[0-9]{2}-[0-9]{2}" "$WORK/t1/megamind/MEGAMIND.md" \
@@ -165,30 +169,36 @@ run = lambda: subprocess.run([sys.executable, "megamind/ensure_config.py"], cwd=
 cfgp = os.path.join(work, "wgp_config.json")
 r = run(); assert r.returncode == 0 and os.path.exists(cfgp), r.stderr
 c = json.load(open(cfgp)); assert c["transformer_quantization"] == "int8" and c["profile"] == 4
-c.update({"transformer_quantization": "fp8", "profile": 2, "image_profile": 1, "audio_profile": 5, "custom_key": "keep", "transformer_types": ["qwen_image_20B"]})
+c.update({"transformer_quantization": "fp8", "profile": 2, "image_profile": 1, "audio_profile": 5, "custom_key": "keep", "transformer_types": ["qwen_image_20B"], "UI_theme": "megamind", "enabled_plugins": ["motion_designer"]})
 json.dump(c, open(cfgp, "w"))
 r = run(); assert r.returncode == 0, r.stderr
 c = json.load(open(cfgp))
 assert c["transformer_quantization"] == "int8" and c["profile"] == 4 and c["image_profile"] == 4
 assert c["audio_profile"] == 5 and c["custom_key"] == "keep"
+assert c["UI_theme"] == "default", "stale megamind theme must migrate to default"
+assert c["enabled_plugins"] == ["motion_designer", "megamind"], "existing plugins must be preserved"
 assert c["transformer_types"] == ["ti2v_2_2", "qwen_image_20B", "chatterbox", "ace_step_v1_5"]
+assert "megamind" in c["enabled_plugins"], "migration must enable the megamind plugin"
 r = run(); assert "no changes" in r.stdout, r.stdout
 c["profile"] = 4.5; json.dump(c, open(cfgp, "w"))
 run(); assert json.load(open(cfgp))["profile"] == 4.5
 PYEOF
 
-# 16. Update-path branch logic: theme-fix-only installs (marker, no ensure_config.py) re-apply; fully patched installs skip
+# 16. Update-path branch logic: converted installs skip; old theme-patch and partial installs re-apply
 SB="$SCRIPT_DIR/setup_megamind_windows.bat"
-grep -qF 'if exist megamind\ensure_config.py findstr /C:"megamind_dark_lock_v2"' "$SB" && grep -qF 'if %MM_APPLY%==1' "$SB" \
-  && ok "setup.bat re-applies patch when ensure_config.py is missing" || bad "setup.bat skip condition would strand theme-fix-only installs"
+grep -qF 'if exist megamind\ensure_config.py if exist plugins\megamind\plugin.py findstr /C:"Megamind Studios" wgp.py >nul 2>&1 || set MM_SKIP=1' "$SB" \
+  && ok "setup.bat skip condition covers old theme-patch installs" || bad "setup.bat skip condition wrong"
+mm_skip() { local d="$1"; [ -f "$d/megamind/ensure_config.py" ] && [ -f "$d/plugins/megamind/plugin.py" ] && ! grep -q "Megamind Studios" "$d/wgp.py"; }
 fresh "$WORK/t3" && cd "$WORK/t3" && git checkout -q -f $PINNED && git apply "$PATCH"
-rm megamind/ensure_config.py   # degrade to theme-fix-only state
-MM=1; [ -f megamind/ensure_config.py ] && grep -q megamind_dark_lock_v2 shared/gradio/ui_studio.py && MM=0
-[ "$MM" = 1 ] && rm -f shared/gradio/ui_studio_megamind.css run_megamind_windows.bat && rm -rf megamind && git reset -q --hard $PINNED && git apply "$PATCH" \
-  && grep -q megamind_dark_lock_v2 shared/gradio/ui_studio.py && [ -f megamind/ensure_config.py ] \
-  && ok "theme-fix-only install re-applies and gains ensure_config.py" || bad "theme-fix-only update path broken"
-MM=1; [ -f megamind/ensure_config.py ] && grep -q megamind_dark_lock_v2 shared/gradio/ui_studio.py && MM=0
-[ "$MM" = 0 ] && ok "fully patched install skips re-apply (idempotent)" || bad "skip path broken"
+mkdir -p plugins/megamind && cp "$SCRIPT_DIR/megamind-plugin/plugin.py" "$SCRIPT_DIR/megamind-plugin/plugin_info.json" "$SCRIPT_DIR/megamind-plugin/__init__.py" plugins/megamind/
+if mm_skip .; then ok "fully converted install skips re-apply (idempotent)"; else bad "skip path broken for converted install"; fi
+echo 'REM Megamind Studios' >> wgp.py
+if mm_skip .; then bad "old theme-patch install would be skipped"; else ok "old theme-patch install re-applies (core edit detected)"; fi
+rm -rf plugins/megamind && git checkout -q -- wgp.py
+if mm_skip .; then bad "missing plugin would be skipped"; else ok "missing plugin forces re-apply"; fi
+rm -rf megamind plugins/megamind shared/gradio/ui_studio_megamind.css && rm -f run_megamind_windows.bat && git reset -q --hard $PINNED && git apply "$PATCH" \
+  && [ -f megamind/ensure_config.py ] && ! grep -q "Megamind Studios" wgp.py \
+  && ok "re-apply resets core and installs add-only patch" || bad "re-apply path broken"
 cd "$SCRIPT_DIR"
 
 echo "== $PASS passed, $FAIL failed =="
