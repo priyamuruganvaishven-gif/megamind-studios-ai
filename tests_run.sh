@@ -123,5 +123,35 @@ PYEOF
 grep -q "fdc63bdf89358fb13c93cf6b38693fd89a859f00" "$APPLY_SH" \
   && ok "apply_patch.sh pins the full 40-char commit SHA" || bad "apply_patch.sh uses short SHA"
 
+# 12. GTX 1060 6GB seeds: int8 quants, low-VRAM profiles, auto attention
+"$PY" - "$WORK/t1" <<'PYEOF' && ok "template seeds GTX 1060 profile (int8 quants, profile 4/3, auto attention)" || bad "template GTX 1060 seeds wrong"
+import json,sys
+c=json.load(open(sys.argv[1]+"/megamind/wgp_config.template.json"))
+assert c.get("transformer_quantization")=="int8", "transformer_quantization must be int8 (Pascal: no fp8 hardware)"
+assert c.get("text_encoder_quantization")=="int8"
+assert c.get("attention_mode")=="auto"
+assert c.get("profile")==4 and c.get("video_profile")==4 and c.get("image_profile")==4, "LowRAM_LowVRAM profile 4 required for 6GB"
+assert c.get("audio_profile")==3, "LowRAM_HighVRAM profile 3 is upstream-recommended for audio"
+PYEOF
+
+# 13. Curated models ship Pascal-runnable quant artifacts in pinned upstream (no fp8-only models)
+"$PY" - "$WORK/t1" <<'PYEOF' && ok "curated models have int8 quanto artifacts, none fp8-only" || bad "curated model quant artifacts wrong"
+import json,sys
+d=sys.argv[1]+"/defaults/"
+def urls(f): return json.load(open(d+f)).get("model",{}).get("URLs",[])
+ti=urls("ti2v_2_2.json");       assert any("quanto" in u and "int8" in u for u in ti), ti
+qi=urls("qwen_image_20B.json"); assert any("quanto" in u and "int8" in u for u in qi), qi
+ace=urls("ace_step_v1_5.json"); assert any("quanto" in u and "int8" in u for u in ace), ace
+cb=urls("chatterbox.json");     assert len(cb)==1, cb
+for name,u in [("ti2v_2_2",ti),("qwen_image_20B",qi),("ace_step_v1_5",ace),("chatterbox",cb)]:
+    assert not all("fp8" in x for x in u), name+" is fp8-only - not Pascal-runnable"
+PYEOF
+
+# 14. Pinned upstream auto-falls back to FP16 on Pascal (sm < 8.0) and defaults to int8 quant
+grep -q 'if  gpu_major < 8:' "$WORK/t1/wgp.py" && grep -q 'bfloat16_supported = False' "$WORK/t1/wgp.py" \
+  && ok "upstream auto FP16 fallback for Pascal present" || bad "upstream Pascal FP16 fallback missing"
+grep -q '"transformer_quantization": "int8"' "$WORK/t1/wgp.py" \
+  && ok "upstream default quantization is int8 (matches template)" || bad "upstream default quant changed"
+
 echo "== $PASS passed, $FAIL failed =="
 [ $FAIL = 0 ]
