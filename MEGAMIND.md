@@ -17,7 +17,8 @@ Modifications (first applied 2026-10-21, updated 2026-10-21):
 3. Model selection: the displayed model list is curated to Wan 2.2 TI2V-5B (video),
    Qwen Image 20B (image), Chatterbox (speech) and ACE-Step 1.5 (music) using
    WanGP's own finetunes/*.json visibility mechanism (megamind/curate_models.py),
-   plus a first-run configuration seed (megamind/wgp_config.template.json).
+   plus a first-run configuration seed and existing-install migration
+   (megamind/wgp_config.template.json, megamind/ensure_config.py).
 
 
 Hardware configuration: GTX 1060 6GB (Pascal)
