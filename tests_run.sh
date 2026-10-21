@@ -153,5 +153,43 @@ grep -q 'if  gpu_major < 8:' "$WORK/t1/wgp.py" && grep -q 'bfloat16_supported = 
 grep -q '"transformer_quantization": "int8"' "$WORK/t1/wgp.py" \
   && ok "upstream default quantization is int8 (matches template)" || bad "upstream default quant changed"
 
+# 15. Existing-install config migration: seeds when absent, enforces GTX 10xx fields, preserves user settings, idempotent
+grep -qF 'python megamind\ensure_config.py' "$SB" && ok "setup.bat runs ensure_config.py migration" || bad "setup.bat missing config migration"
+"$PY" - "$WORK/t1" <<'PYEOF' && ok "ensure_config: seed/migrate/preserve/idempotent" || bad "ensure_config migration wrong"
+import json, os, subprocess, sys, tempfile
+work = tempfile.mkdtemp()
+os.makedirs(os.path.join(work, "megamind"))
+for f in ("ensure_config.py", "wgp_config.template.json"):
+    import shutil; shutil.copy(os.path.join(sys.argv[1], "megamind", f), os.path.join(work, "megamind", f))
+run = lambda: subprocess.run([sys.executable, "megamind/ensure_config.py"], cwd=work, capture_output=True, text=True)
+cfgp = os.path.join(work, "wgp_config.json")
+r = run(); assert r.returncode == 0 and os.path.exists(cfgp), r.stderr
+c = json.load(open(cfgp)); assert c["transformer_quantization"] == "int8" and c["profile"] == 4
+c.update({"transformer_quantization": "fp8", "profile": 2, "image_profile": 1, "audio_profile": 5, "custom_key": "keep", "transformer_types": ["qwen_image_20B"]})
+json.dump(c, open(cfgp, "w"))
+r = run(); assert r.returncode == 0, r.stderr
+c = json.load(open(cfgp))
+assert c["transformer_quantization"] == "int8" and c["profile"] == 4 and c["image_profile"] == 4
+assert c["audio_profile"] == 5 and c["custom_key"] == "keep"
+assert c["transformer_types"] == ["ti2v_2_2", "qwen_image_20B", "chatterbox", "ace_step_v1_5"]
+r = run(); assert "no changes" in r.stdout, r.stdout
+c["profile"] = 4.5; json.dump(c, open(cfgp, "w"))
+run(); assert json.load(open(cfgp))["profile"] == 4.5
+PYEOF
+
+# 16. Update-path branch logic: theme-fix-only installs (marker, no ensure_config.py) re-apply; fully patched installs skip
+SB="$SCRIPT_DIR/setup_megamind_windows.bat"
+grep -qF 'if exist megamind\ensure_config.py findstr /C:"megamind_dark_lock_v2"' "$SB" && grep -qF 'if %MM_APPLY%==1' "$SB" \
+  && ok "setup.bat re-applies patch when ensure_config.py is missing" || bad "setup.bat skip condition would strand theme-fix-only installs"
+fresh "$WORK/t3" && cd "$WORK/t3" && git checkout -q -f $PINNED && git apply "$PATCH"
+rm megamind/ensure_config.py   # degrade to theme-fix-only state
+MM=1; [ -f megamind/ensure_config.py ] && grep -q megamind_dark_lock_v2 shared/gradio/ui_studio.py && MM=0
+[ "$MM" = 1 ] && rm -f shared/gradio/ui_studio_megamind.css run_megamind_windows.bat && rm -rf megamind && git reset -q --hard $PINNED && git apply "$PATCH" \
+  && grep -q megamind_dark_lock_v2 shared/gradio/ui_studio.py && [ -f megamind/ensure_config.py ] \
+  && ok "theme-fix-only install re-applies and gains ensure_config.py" || bad "theme-fix-only update path broken"
+MM=1; [ -f megamind/ensure_config.py ] && grep -q megamind_dark_lock_v2 shared/gradio/ui_studio.py && MM=0
+[ "$MM" = 0 ] && ok "fully patched install skips re-apply (idempotent)" || bad "skip path broken"
+cd "$SCRIPT_DIR"
+
 echo "== $PASS passed, $FAIL failed =="
 [ $FAIL = 0 ]
