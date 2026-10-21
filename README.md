@@ -3,7 +3,7 @@
 A local AI generation studio for Windows: video, images, speech and music in one
 interface - WanGP's proven engine with the Megamind name and logo, rounded
 buttons, a light/dark mode toggle, easy pill navigation and a curated model
-selection (Wan 2.1 1.3B video, FLUX.2 Klein 4B image, Chatterbox speech, ACE-Step 1.5 music).
+selection (Wan 2.1 1.3B video, Wan 2.2 TI2V-5B image, Chatterbox speech, ACE-Step 1.5 music).
 
 ## Requirements
 - Windows 10/11, NVIDIA GTX 1060 6 GB or better
