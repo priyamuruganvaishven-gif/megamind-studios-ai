@@ -57,13 +57,12 @@ pinned upstream defaults/*.json):
   (DiT-only build, no LM stage)
 - Chatterbox: t3_mtl23ls_v2.safetensors (small single file, no quant needed)
 
-PyTorch for GTX 10xx: 2.7.1 from the cu128 TEST index
-(download.pytorch.org/whl/test/cu128) - the stable cu128 wheels dropped the
-Pascal (sm_61) kernels. setup_megamind_windows.bat checks
-torch.cuda.get_arch_list() for sm_61 and force-reinstalls from the right
-index when missing. If generation still fails with "no kernel image is
-available for execution on the device", install the same pins from
-https://download.pytorch.org/whl/cu126 instead.
+PyTorch for GTX 10xx (Windows): torch 2.7.1 + cu128 from the standard
+index. The actual Windows cu128 wheel was binary-verified to contain
+Pascal (sm_61) SASS - full GTX 10xx support - and the cu128 test-index URL
+in upstream's GTX 10xx docs serves the identical Windows wheel (sha256
+match). Note the LINUX cu128 wheel did drop Pascal (pytorch/pytorch#157517);
+irrelevant to this Windows-only build.
 
 Expectations on 6GB (30-minute per-generation target): the four curated
 models are the smallest WanGP options in their category. Generation speed
