@@ -1,8 +1,11 @@
 {
   "name": "Megamind Studios",
   "author": "Megamind Studios",
-  "version": "1.0.0",
-  "description": "Megamind Studios branding: logo header, rounded controls, light/dark switch, cleaner navigation.",
+  "version": "1.1.0",
+  "description": "Megamind Studios branding: logo header, rounded controls, light/dark switch, cleaner navigation. Adds Stable Diffusion 1.5 image generation to the Media Generator model list.",
   "date": "2026-10-21",
-  "wan2gp_version": ""
+  "wan2gp_version": "",
+  "model_handlers": [".models.stable_diffusion_1_5.sd15_handler"],
+  "defaults": "./defaults",
+  "profiles": "./profiles"
 }
