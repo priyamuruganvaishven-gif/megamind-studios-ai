@@ -84,7 +84,10 @@ SB="$SCRIPT_DIR/setup_megamind_windows.bat"
 g() { grep -q "$1" "$SB"; }
 g "where git" && g "py -3.10" && g "checkout %PINNED%" \
   && g "torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1" \
-  && ok "setup.bat: git/python checks, pinned checkout, pinned torch stack" || bad "setup.bat missing required logic"
+  && g "findstr /V /I /C:" \
+  && g 'requirements_megamind.txt' \
+  && ok "setup.bat: git/python checks, pinned checkout, pinned torch stack, torchcodec excluded (documented)" || bad "setup.bat missing required logic"
+if grep -q "torchcodec==0.5.0" "$SB"; then bad "setup.bat pins torchcodec 0.5.0 (no Windows wheel exists)"; else ok "setup.bat has no unshippable torchcodec pin"; fi
 if grep -q "^echo @echo off>" "$SB"; then bad "setup.bat overwrites the guarded launcher"; else ok "setup.bat preserves the guarded launcher"; fi
 
 # 9. Final installed launcher is the guarded one from the patch
@@ -101,8 +104,21 @@ grep -q "WanGP Copyright DeepBeepMeep" "$WORK/t1/wgp.py" && grep -q "by DeepBeep
 grep -Eq "20[0-9]{2}-[0-9]{2}-[0-9]{2}" "$WORK/t1/megamind/MEGAMIND.md" \
   && ok "modification notice dated (license 4.1d)" || bad "modification notice missing date"
 
-# 11. Delivered .bat files use CRLF (Windows cmd reliability)
-if grep -q $'\r' "$SB" && grep -q $'\r' "$PATCH"; then ok "delivered batch files are CRLF"; else bad "batch files not CRLF"; fi
+# 11. Delivered .bat files are line-ending safe (no multi-line blocks, no labels) - valid under LF or CRLF
+lfsafe() { ! grep -qE '^[[:space:]]*\)' "$1" && ! grep -qE '^[[:space:]]*goto |^[[:space:]]*:[A-Za-z]' "$1"; }
+lfsafe "$SB" && ok "setup.bat is line-ending safe (no blocks/labels)" || bad "setup.bat has LF-fragile constructs"
+"$PY" - "$PATCH" <<'PYEOF' && ok "patch-carried launcher is line-ending safe" || bad "patch launcher has LF-fragile constructs"
+import sys
+txt=open(sys.argv[1],encoding='utf-8').read()
+import re
+sec=txt.split('run_megamind_windows.bat')[1]
+assert 'goto' not in sec.lower()
+for line in sec.splitlines():
+    body=line[1:] if line[:1] in '+- ' else line
+    assert not body.strip().startswith(')'), body
+PYEOF
+grep -q "fdc63bdf89358fb13c93cf6b38693fd89a859f00" "$APPLY_SH" \
+  && ok "apply_patch.sh pins the full 40-char commit SHA" || bad "apply_patch.sh uses short SHA"
 
 echo "== $PASS passed, $FAIL failed =="
 [ $FAIL = 0 ]
