@@ -23,4 +23,9 @@ ACE-Step 1.5).
   credits remain in the app's About tab and LICENSE.txt.
 - "Made with WanGP" credit is required if you directly sell generated outputs.
 - MiniMax H3 is intentionally excluded for now (license territory limits).
+- torchcodec is intentionally excluded from the install: WanGP at the pinned
+  commit never imports it (media IO uses imageio/ffmpeg/av/opencv/decord/
+  soundfile), its pinned torchcodec 0.10.0 targets torch 2.9+ per the official
+  compatibility table, and no Windows wheel exists for the torch 2.7 GTX 10xx
+  build. setup_megamind_windows.bat filters it out before pip install.
 - Not for resale, white-labeling or hosted/paid access.
