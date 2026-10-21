@@ -66,12 +66,17 @@ echo [Megamind] Installing WanGP requirements...
 pip install -r requirements.txt
 if errorlevel 1 ( echo [Megamind] Requirements install failed. Rerun this file to retry. & pause & exit /b 1 )
 
+echo [Megamind] Pinning torchcodec 0.5.0 ^(official match for torch 2.7^)...
+pip install torchcodec==0.5.0
+if errorlevel 1 ( echo [Megamind] torchcodec pin failed. Rerun this file to retry. & pause & exit /b 1 )
+
 echo [Megamind] Applying Megamind model selection...
 python megamind\curate_models.py
 
 if not exist wgp_config.json copy megamind\wgp_config.template.json wgp_config.json >nul
 
 if not exist "%WAN2GP_DIR%\run_megamind_windows.bat" ( echo [Megamind] Launcher missing - patch did not apply fully. Rerun this file. & pause & exit /b 1 )
+powershell -NoProfile -Command "$p='%WAN2GP_DIR%\run_megamind_windows.bat'; (Get-Content $p) -join [char]13+[char]10 | Set-Content $p -NoNewline" >nul 2>&1
 
 echo.
 echo [Megamind] Setup complete. Start the studio with: %WAN2GP_DIR%\run_megamind_windows.bat
