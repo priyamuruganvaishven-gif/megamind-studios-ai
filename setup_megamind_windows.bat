@@ -34,8 +34,9 @@ git checkout %PINNED% >nul 2>&1
 if errorlevel 1 ( echo [Megamind] Could not check out %PINNED%. Report this to Megamind support. & pause & exit /b 1 )
 
 echo [Megamind] Applying the Megamind patch...
-git apply --check "%~dp0megamind-v1.patch" >nul 2>&1 && git apply "%~dp0megamind-v1.patch"
-if errorlevel 1 echo [Megamind] Patch already applied - continuing.
+findstr /C:"megamind_dark_lock_v2" shared\gradio\ui_studio.py >nul 2>&1 && echo [Megamind] Latest Megamind patch already applied - skipping.
+findstr /C:"megamind_dark_lock_v2" shared\gradio\ui_studio.py >nul 2>&1 || ( del /q shared\gradio\ui_studio_megamind.css 2>nul & rmdir /s /q megamind 2>nul & del /q run_megamind_windows.bat 2>nul & git reset --hard %PINNED% >nul 2>&1 & git apply "%~dp0megamind-v1.patch" )
+findstr /C:"megamind_dark_lock_v2" shared\gradio\ui_studio.py >nul 2>&1 || ( echo [Megamind] Patch update failed. Report this to Megamind support. & pause & exit /b 1 )
 findstr /C:"Megamind Studios" wgp.py >nul || ( echo [Megamind] Patch verification failed. Report this to Megamind support. & pause & exit /b 1 )
 
 if not exist venv %PYLAUNCH% -m venv venv
