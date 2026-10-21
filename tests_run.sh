@@ -29,9 +29,10 @@ fresh "$WORK/t1" && cd "$WORK/t1" && git checkout -q -f $PINNED
 if git apply --check "$PATCH" 2>/dev/null && git apply "$PATCH" 2>/dev/null; then ok "patch applies cleanly onto pinned commit $PINNED"; else bad "patch does not apply onto $PINNED"; fi
 
 # 2. apply_patch.sh REFUSES a wrong base commit (real guard check: exit code + message)
-WRONG=$(git -C "$SRC" rev-parse --short HEAD)
-if [ "$WRONG" = "$PINNED" ]; then WRONG=$(git -C "$SRC" rev-parse --short "$PINNED~1" 2>/dev/null || true); fi
-if [ -z "$WRONG" ] || [ "$WRONG" = "$PINNED" ]; then bad "no non-pinned commit available for guard test"; else
+PINNED_FULL=fdc63bdf89358fb13c93cf6b38693fd89a859f00
+HEAD_FULL=$(git -C "$SRC" rev-parse HEAD)
+if [ "$HEAD_FULL" = "$PINNED_FULL" ]; then WRONG=$(git -C "$SRC" rev-parse --short "$PINNED_FULL~1" 2>/dev/null || true); else WRONG=$(git -C "$SRC" rev-parse --short HEAD); fi
+if [ -z "$WRONG" ] || [ "$(git -C "$SRC" rev-parse "$WRONG" 2>/dev/null)" = "$PINNED_FULL" ]; then bad "no non-pinned commit available for guard test (shallow clone at pinned?)"; else
 fresh "$WORK/t2" && cd "$WORK/t2" && git checkout -q -f "$WRONG"
 OUT=$(bash "$APPLY_SH" "$PATCH" 2>&1); RC=$?
 if [ $RC -ne 0 ] && echo "$OUT" | grep -q "$PINNED"; then ok "apply_patch.sh refuses non-pinned commit $WRONG (exit $RC, names $PINNED)"; else bad "apply_patch.sh guard broken (exit $RC): $OUT"; fi
