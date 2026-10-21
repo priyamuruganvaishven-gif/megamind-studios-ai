@@ -29,3 +29,8 @@ ACE-Step 1.5).
   compatibility table, and no Windows wheel exists for the torch 2.7 GTX 10xx
   build. setup_megamind_windows.bat filters it out before pip install.
 - Not for resale, white-labeling or hosted/paid access.
+- An NVIDIA GPU + driver is required even to LAUNCH the interface: upstream
+  WanGP's shared/attention.py (line 17) queries the CUDA device at import and
+  there is no CPU-only mode. The Windows install is CI-validated up to that
+  hardware boundary (GPU-less runner, 2026-10-21); UI launch and generation on
+  your GTX 1060 are NOT yet verified - driver and runtime path untested.
