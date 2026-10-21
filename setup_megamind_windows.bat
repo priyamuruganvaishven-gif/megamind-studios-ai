@@ -59,7 +59,7 @@ if not exist venv (
 call venv\Scripts\activate.bat
 
 echo [Megamind] Installing PyTorch 2.7.1 cu128 ^(GTX 10xx build^)...
-pip install torch==2.7.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 if errorlevel 1 ( echo [Megamind] PyTorch install failed. Check your internet connection and rerun. & pause & exit /b 1 )
 
 echo [Megamind] Installing WanGP requirements...
@@ -71,10 +71,7 @@ python megamind\curate_models.py
 
 if not exist wgp_config.json copy megamind\wgp_config.template.json wgp_config.json >nul
 
-echo @echo off> "%WAN2GP_DIR%\run_megamind_windows.bat"
-echo cd /d %WAN2GP_DIR%>> "%WAN2GP_DIR%\run_megamind_windows.bat"
-echo venv\Scripts\python wgp.py>> "%WAN2GP_DIR%\run_megamind_windows.bat"
-echo pause>> "%WAN2GP_DIR%\run_megamind_windows.bat"
+if not exist "%WAN2GP_DIR%\run_megamind_windows.bat" ( echo [Megamind] Launcher missing - patch did not apply fully. Rerun this file. & pause & exit /b 1 )
 
 echo.
 echo [Megamind] Setup complete. Start the studio with: %WAN2GP_DIR%\run_megamind_windows.bat
