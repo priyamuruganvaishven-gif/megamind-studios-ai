@@ -1,9 +1,9 @@
 diff --git a/megamind/MEGAMIND.md b/megamind/MEGAMIND.md
 new file mode 100644
-index 0000000..420a990
+index 0000000..d2c6178
 --- /dev/null
 +++ b/megamind/MEGAMIND.md
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,102 @@
 +# Megamind Studios - modification notice
 +
 +Megamind Studios is a copy of WanGP (https://github.com/deepbeepmeep/Wan2GP)
@@ -23,13 +23,17 @@ index 0000000..420a990
 +   API (custom JS/CSS); it changes appearance only and does not alter generation,
 +   models or settings.
 +2. Model selection: the displayed model list is curated to Wan 2.1 T2V-1.3B
-+   (video), FLUX.2 Klein 4B (image), Chatterbox (speech) and ACE-Step 1.5
-+   (music) - the smallest WanGP option in each category - using
-+   WanGP's own finetunes/*.json visibility mechanism (megamind/curate_models.py),
-+   plus a first-run configuration seed and existing-install migration
-+   (megamind/wgp_config.template.json, megamind/ensure_config.py). The migration
-+   also enables the megamind plugin and resets a stale "megamind" UI theme value
-+   to "default" for installs that used the earlier theme-patch build.
++   (video), Wan 2.2 TI2V-5B (image, in image mode), Chatterbox (speech) and
++   ACE-Step 1.5 (music) - the smallest WanGP option in each category that
++   computes in FP16 - using WanGP's own finetunes/*.json visibility mechanism
++   (megamind/curate_models.py), plus a first-run configuration seed and
++   existing-install migration (megamind/wgp_config.template.json,
++   megamind/ensure_config.py). The migration also enables the megamind plugin
++   and resets a stale "megamind" UI theme value to "default" for installs that
++   used the earlier theme-patch build. FLUX.2 Klein 4B was evaluated for image
++   and rejected: its Flux2 loader pipeline is bf16-only (hardcoded in
++   models/flux/util.py, ignoring WanGP's Pascal FP16 fallback) and bf16 models
++   do not run on pre-Ampere GPUs (Wan2GP issue #225).
 +3. run_megamind_windows.bat launcher and megamind/ support folder, added alongside
 +   upstream files.
 +
@@ -37,31 +41,45 @@ index 0000000..420a990
 +
 +The seeded configuration (megamind/wgp_config.template.json) targets GTX 10xx:
 +
-+- Quantization: Scaled Int8 for transformer and text encoder - WanGP's own
-+  default and recommendation, and the Pascal-compatible path. FP8 is not
-+  offered for these models and needs newer GPUs (sm_89+).
++- Quantization: 16-bit (no quantization) for the transformer, Scaled Int8 for
++  the text encoder. This is the Pascal requirement, not a quality choice:
++  every int8 quanto checkpoint offered for the curated models is bf16-named,
++  and WanGP forces the compute dtype to bfloat16 for bf16-named quanto files
++  (wgp.py:4229-4231) regardless of the FP16 fallback - and bf16 does not run
++  on pre-Ampere GPUs (Wan2GP issue #225, confirmed on RTX 2060). The
++  unquantized checkpoints carry no forcing, so the fallback below applies.
++  The trade is RAM (the 64 GB target machine absorbs it), not quality.
++  FP8 needs newer GPUs (sm_89+) and is not offered.
 +- Data type: WanGP automatically switches to FP16 on GPUs with compute
-+  capability below 8.0 (bfloat16_supported check in wgp.py). The startup
-+  console line "GPU architecture doesn't support optimed BF16 Kernels" is
-+  this normal fallback, not an error.
++  capability below 8.0 (bfloat16_supported check in wgp.py) when the loaded
++  checkpoint is not bf16-forced - which the configuration above guarantees.
++  The startup console line "GPU architecture doesn't support optimed BF16
++  Kernels" is this normal fallback, not an error. The shared umt5-xxl int8
++  text encoder (bf16-named, 6.73 GB) is bf16-typed but too large for 6 GB
++  VRAM, so it runs CPU-offloaded under memory profile 4 - bf16 on CPU is
++  fine; this is the same path every Wan-on-GTX-10xx install uses.
 +- Attention: auto, which resolves to sdpa on Pascal (flash/sage need newer
 +  GPUs).
 +- Memory profile: 4 (LowRAM_LowVRAM, upstream "Recommended") for video and
 +  image, 3 (LowRAM_HighVRAM, upstream-recommended for audio) for audio.
 +
-+Per-model checkpoint actually downloaded with Int8 (verified against the
-+pinned upstream defaults/*.json):
++Per-model checkpoint actually downloaded (verified against the pinned
++upstream defaults/*.json and the DeepBeepMeep HF repos):
 +
-+- Wan 2.1 T2V-1.3B: wan2.1_text2video_1.3B_mbf16.safetensors - 1.3B is small
-+  enough to run unquantized (WanGP auto-switches compute to FP16 on Pascal);
-+  no int8 variant exists for it. Shares the umt5-xxl int8 text encoder
-+  (6.73 GB) with the other Wan video models (DeepBeepMeep/Wan2.1).
-+- FLUX.2 Klein 4B: flux-2-klein-4b_quanto_bf16_int8.safetensors plus its
-+  qwen3_quanto_bf16_int8.safetensors text encoder (DeepBeepMeep/Flux2,
-+  DeepBeepMeep/Z-Image). Distilled: 4 inference steps by default.
-+- ACE-Step 1.5 Turbo 2B: ace_step_v1_5_transformer_quanto_bf16_int8.safetensors
-+  (DiT-only build, no LM stage)
-+- Chatterbox: t3_mtl23ls_v2.safetensors (small single file, no quant needed)
++- Wan 2.1 T2V-1.3B (video): wan2.1_text2video_1.3B_mbf16.safetensors (2.87 GB,
++  the only variant; loads FP16 on Pascal via the fallback). Shares the
++  umt5-xxl int8 text encoder (6.73 GB, CPU-offloaded) with the other Wan
++  models (DeepBeepMeep/Wan2.1).
++- Wan 2.2 TI2V-5B (image): wan2.2_text2video_5B_mbf16.safetensors (~10.5 GB
++  unquantized; the Wan loader honors the FP16 fallback). Use it in image mode
++  (single frame) - the int8 variant is bf16-forced and cannot run on Pascal.
++  Shares the same umt5-xxl encoder. 720p or better only (upstream warns
++  lower resolutions give poor results on this model).
++- ACE-Step 1.5 Turbo 2B (music): ace_step_v1_5_transformer_bf16.safetensors
++  (~4.8 GB unquantized; its pipeline threads the FP16 dtype through the DiT,
++  audio VAE and text encoder). DiT-only build, no LM stage.
++- Chatterbox (speech): t3_mtl23ls_v2.safetensors (2.14 GB, fp32 on disk,
++  converted to FP16 at load on Pascal).
 +
 +PyTorch for GTX 10xx (Windows): torch 2.7.1 + cu128 from the standard
 +index. The actual Windows cu128 wheel was binary-verified to contain
@@ -71,16 +89,18 @@ index 0000000..420a990
 +irrelevant to this Windows-only build.
 +
 +Expectations on 6GB (30-minute per-generation target): the four curated
-+models are the smallest WanGP options in their category. Generation speed
-+and memory fit were NOT tested on the target GPU (no GPU in the build
-+environment) - treat the first run of each model as a timed test and abort
-+any run that passes 30 minutes. For Wan 2.1 1.3B video, WanGP's docs
-+recommend 832x480, 49 frames, 20 steps as first settings; if that is too
-+slow on this card, drop to 33 frames / 15 steps before dropping resolution.
-+Wan 2.1 1.3B is text-to-video only. The earlier defaults (Wan 2.2 TI2V-5B,
-+Qwen Image 20B) are hidden by the curation update but never deleted:
-+already-downloaded checkpoints stay on disk and the models can be re-added
-+by removing their finetunes/*.json hiding stubs.
++models are the smallest WanGP options in their category whose compute dtype
++falls back to FP16 on Pascal. Generation speed and memory fit were NOT
++tested on the target GPU (no GPU in the build environment) - treat the
++first run of each model as a timed test and abort any run that passes 30
++minutes. For Wan 2.1 1.3B video, WanGP's docs recommend 832x480, 49 frames,
++20 steps as first settings; if that is too slow on this card, drop to 33
++frames / 15 steps before dropping resolution. Wan 2.1 1.3B is text-to-video
++only. For Wan 2.2 5B images, start with a single 720p image before longer
++jobs. FLUX.2 Klein 4B, Qwen Image 20B and the other upstream defaults are
++hidden by the curation but never deleted: already-downloaded checkpoints
++stay on disk and the models can be re-added by removing their
++finetunes/*.json hiding stubs.
 +
 +Intended use: internal studio/client content production tool. Not for resale,
 +white-labeling, hosted/paid access or redistribution as a product - those remain
@@ -88,10 +108,10 @@ index 0000000..420a990
 +for Direct Output Sales (license section 6).
 diff --git a/megamind/curate_models.py b/megamind/curate_models.py
 new file mode 100644
-index 0000000..4ba5de9
+index 0000000..1dd4b25
 --- /dev/null
 +++ b/megamind/curate_models.py
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,32 @@
 +# Megamind Studios - model list curation.
 +# Writes finetunes/<model_type>.json stubs {"model":{"visible":false}} for every
 +# model in defaults/ that is not on the Megamind allowlist. Upstream-supported
@@ -100,7 +120,11 @@ index 0000000..4ba5de9
 +# Re-run after any WanGP upstream update (new defaults get hidden by default).
 +import glob, json, os
 +
-+ALLOWLIST = {"t2v_1.3B", "flux2_klein_4b", "chatterbox", "ace_step_v1_5"}
++ALLOWLIST = {"t2v_1.3B", "ti2v_2_2", "chatterbox", "ace_step_v1_5"}
++# flux2_klein_4b removed 2026-10-21: the Flux2 loader pipeline is bf16-only
++# (hardcoded in models/flux/util.py, ignores WanGP's Pascal FP16 fallback)
++# and bf16 does not run on pre-Ampere GPUs (Wan2GP issue #225). Image output
++# is served by Wan 2.2 TI2V-5B in image mode (FP16-capable Wan pipeline).
 +# H3 (MiniMax) deliberately NOT included: its license restricts display of
 +# outputs outside its territory (excludes US/EU/UK/SK) - pending owner decision.
 +
@@ -122,17 +146,20 @@ index 0000000..4ba5de9
 +print(f"Megamind curation: {written} models hidden, {kept} kept visible: {sorted(ALLOWLIST)}")
 diff --git a/megamind/ensure_config.py b/megamind/ensure_config.py
 new file mode 100644
-index 0000000..c6b575c
+index 0000000..f62ccfa
 --- /dev/null
 +++ b/megamind/ensure_config.py
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,91 @@
 +# Megamind Studios - existing-install config migration for GTX 10xx.
 +# Runs on every setup (setup_megamind_windows.bat), after curate_models.py.
 +# Seeds wgp_config.json from the template when absent, then enforces only
-+# the GTX 10xx fields the user asked to preconfigure: Int8 quantization
-+# (fp8 has no Pascal hardware support; "bf16" = no quantization pulls the
-+# full-size checkpoints), low-VRAM memory profiles, auto attention and the
-+# curated model allowlist. Every other setting (save paths, resolutions,
++# the GTX 10xx fields the user asked to preconfigure: 16-bit (no quantization)
++# for the transformer - every int8 quanto checkpoint for the curated models
++# is bf16-named, and WanGP forces bf16 compute dtype for those files
++# (wgp.py:4229-4231), which cannot run on pre-Ampere GPUs (Wan2GP issue #225);
++# the unquantized checkpoints let WanGP's automatic FP16 fallback engage.
++# Text encoder stays Int8 (half the RAM; the encoder runs CPU-offloaded in
++# the LowVRAM profile). FP8 has no Pascal hardware support either way. Every other setting (save paths, resolutions,
 +# per-model choices, extensions) is preserved. Safe to re-run: idempotent.
 +import json, os, shutil, sys
 +
@@ -157,9 +184,11 @@ index 0000000..c6b575c
 +        cfg[key] = want
 +        changed.append("%s: %r -> %r" % (key, cur, want))
 +
-+# Int8 is the only quantization with GTX 10xx hardware support.
-+for key in ("transformer_quantization", "text_encoder_quantization"):
-+    enforce(key, "int8", lambda v: v != "int8")
++# 16-bit (no quantization) is the only transformer path whose compute dtype
++# falls back to FP16 on Pascal; int8 quanto checkpoints are bf16-forced.
++enforce("transformer_quantization", "bf16", lambda v: v != "bf16")
++# Text encoder: int8 quanto (6.73 GB vs 13.5 GB) - runs CPU-offloaded anyway.
++enforce("text_encoder_quantization", "int8", lambda v: v != "int8")
 +
 +# 6GB VRAM needs a LowVRAM profile for video/image: keep 4/4.5/5, replace
 +# missing or high-VRAM values (1/2/3) with upstream-recommended 4.
@@ -214,7 +243,7 @@ index 0000000..c6b575c
 +    print("Megamind config: already configured for GTX 10xx - no changes")
 diff --git a/megamind/wgp_config.template.json b/megamind/wgp_config.template.json
 new file mode 100644
-index 0000000..d59c78c
+index 0000000..0cec838
 --- /dev/null
 +++ b/megamind/wgp_config.template.json
 @@ -0,0 +1,24 @@
@@ -222,11 +251,11 @@ index 0000000..d59c78c
 +    "attention_mode": "auto",
 +    "transformer_types": [
 +        "t2v_1.3B",
-+        "flux2_klein_4b",
++        "ti2v_2_2",
 +        "chatterbox",
 +        "ace_step_v1_5"
 +    ],
-+    "transformer_quantization": "int8",
++    "transformer_quantization": "bf16",
 +    "text_encoder_quantization": "int8",
 +    "save_path": "outputs",
 +    "image_save_path": "outputs",
