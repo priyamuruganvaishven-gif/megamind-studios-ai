@@ -1,0 +1,51 @@
+{
+  
+  "model": {
+    
+    "name": "Stable Diffusion 1.5",
+    
+    "architecture": "stable_diffusion_1_5",
+    
+    "description": "Classic open image generator built into the Media Generator. First use downloads about 2.7 GB from https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5 (CreativeML OpenRAIL-M license). Includes a safety checker. Runs in fp16.",
+    
+    "URLs": [
+      
+      "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/unet/diffusion_pytorch_model.fp16.safetensors"
+      
+    ],
+    
+    "dtype": "fp16"
+    
+  },
+  
+  "prompt": "A cozy watercolor illustration of a tiny greenhouse on a rainy evening, warm light, detailed plants, soft atmosphere",
+  
+  "negative_prompt": "low quality, blurry, distorted, extra limbs, text, watermark",
+  
+  "resolution": "512x512",
+  
+  "batch_size": 1,
+  
+  "num_inference_steps": 20,
+  
+  "guidance_scale": 7.5,
+  
+  "sample_solver": "euler"
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
