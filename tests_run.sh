@@ -42,25 +42,25 @@ fi
 fresh "$WORK/t3" && cd "$WORK/t3" && git checkout -q -f $PINNED
 if bash "$APPLY_SH" "$PATCH" >/dev/null 2>&1 && [ -f megamind/ensure_config.py ]; then ok "apply_patch.sh applies onto $PINNED"; else bad "apply_patch.sh failed onto $PINNED"; fi
 
-# 4. Curation on the patched tree: 268 hidden, exactly 4 visible
+# 4. Curation on the patched tree: non-curated hidden, exactly 3 defaults visible (SD1.5 image comes from the plugin, not defaults/)
 cd "$WORK/t1" && rm -rf finetunes && mkdir -p finetunes
 echo '{"model":{"visible":false}}' > finetunes/t2v_1.3B.json   # stale stub from the pre-switch curation
 "$PY" megamind/curate_models.py >/dev/null
 missing=0; visible=0
 for f in defaults/*.json; do
   mt=$(basename "$f" .json); stub="finetunes/$mt.json"
-  case "$mt" in t2v_1.3B|ti2v_2_2|chatterbox|ace_step_v1_5)
+  case "$mt" in t2v_1.3B|chatterbox|ace_step_v1_5)
     [ -f "$stub" ] && bad "allowlisted $mt got a hiding stub" || visible=$((visible+1));;
   *) { [ -f "$stub" ] && grep -q '"visible": false' "$stub"; } || { missing=$((missing+1)); bad "stub missing: $mt"; };;
   esac
 done
-[ "$missing" = 0 ] && [ "$visible" = 4 ] && ok "curation: all non-curated hidden, exactly 4 visible, stale allowlisted stub removed" || bad "curation wrong: $missing missing stubs, $visible visible"
+[ "$missing" = 0 ] && [ "$visible" = 3 ] && ok "curation: all non-curated hidden, exactly 3 visible (image is the SD1.5 plugin model, not a defaults entry), stale allowlisted stub removed" || bad "curation wrong: $missing missing stubs, $visible visible"
 
-# 5. Config template: valid JSON, allowlist, megamind theme, ti2v_2_2 default
+# 5. Config template: valid JSON, allowlist (video/speech/music + SD1.5 image plugin), default theme
 "$PY" - "$WORK/t1" <<'PYEOF' && ok "wgp_config.template.json valid" || bad "config template invalid"
 import json,sys
 c=json.load(open(sys.argv[1]+"/megamind/wgp_config.template.json"))
-assert c.get("transformer_types")==["t2v_1.3B","ti2v_2_2","chatterbox","ace_step_v1_5"]
+assert c.get("transformer_types")==["t2v_1.3B","chatterbox","ace_step_v1_5","stable_diffusion_1_5"]
 assert c.get("UI_theme")=="default", "megamind theme is gone (plugin replaced it); template must seed default"
 assert c.get("enabled_plugins")==["motion_designer","megamind"]
 assert c.get("last_model_type")=="t2v_1.3B"
@@ -142,18 +142,17 @@ assert c.get("profile")==4 and c.get("video_profile")==4 and c.get("image_profil
 assert c.get("audio_profile")==3, "LowRAM_HighVRAM profile 3 is upstream-recommended for audio"
 PYEOF
 
-# 13. Curated models: unquantized (non-quanto) checkpoint exists so the FP16 fallback can engage; Klein rejected (bf16-only loader)
+# 13. Curated Wan/audio models: unquantized (non-quanto) checkpoint exists so the FP16 fallback can engage; Klein rejected (bf16-only loader)
 "$PY" - "$WORK/t1" <<'PYEOF' && ok "curated artifacts Pascal-runnable (unquantized FP16 route), Klein excluded for bf16-only pipeline" || bad "curated model artifacts wrong"
 import json,sys
 d=sys.argv[1]+"/defaults/"
 def urls(f): return json.load(open(d+f)).get("model",{}).get("URLs",[])
 t1=urls("t2v_1.3B.json");  assert len(t1)==1 and "1.3B" in t1[0] and "quanto" not in t1[0], t1
-ti=urls("ti2v_2_2.json");  assert any("quanto" not in u for u in ti), ti   # unquantized 5B exists -> FP16 fallback route
 ace=urls("ace_step_v1_5.json"); assert any("quanto" not in u for u in ace), ace
 cb=urls("chatterbox.json");    assert len(cb)==1 and "quanto" not in cb[0], cb
 kl=urls("flux2_klein_4b.json"); assert kl, "Klein still shipped upstream (hidden by curation, not deleted)"
 # every curated pick must select a non-quanto file under 16-bit transformer_quantization="bf16" (choices[0])
-for name,u in [("t2v_1.3B",t1),("ti2v_2_2",ti),("ace_step_v1_5",ace),("chatterbox",cb)]:
+for name,u in [("t2v_1.3B",t1),("ace_step_v1_5",ace),("chatterbox",cb)]:
     assert "quanto" not in u[0], name+" first URL is quanto - 16-bit route broken"
 PYEOF
 
@@ -185,7 +184,7 @@ assert c["transformer_quantization"] == "bf16" and c["profile"] == 4 and c["imag
 assert c["audio_profile"] == 5 and c["custom_key"] == "keep"
 assert c["UI_theme"] == "default", "stale megamind theme must migrate to default"
 assert c["enabled_plugins"] == ["motion_designer", "megamind"], "existing plugins must be preserved"
-assert c["transformer_types"] == ["t2v_1.3B", "ti2v_2_2", "chatterbox", "ace_step_v1_5"]
+assert c["transformer_types"] == ["t2v_1.3B", "chatterbox", "ace_step_v1_5", "stable_diffusion_1_5"]
 assert c["last_model_type"] == "t2v_1.3B", "stale last_model_type must migrate to the template default"
 assert "megamind" in c["enabled_plugins"], "migration must enable the megamind plugin"
 r = run(); assert "no changes" in r.stdout, r.stdout
@@ -208,6 +207,42 @@ if mm_skip .; then bad "missing plugin would be skipped"; else ok "missing plugi
 rm -rf megamind plugins/megamind shared/gradio/ui_studio_megamind.css && rm -f run_megamind_windows.bat && git reset -q --hard $PINNED && git apply "$PATCH" \
   && [ -f megamind/ensure_config.py ] && ! grep -q "Megamind Studios" wgp.py \
   && ok "re-apply resets core and installs add-only patch" || bad "re-apply path broken"
+
+# 17. SD1.5 image plugin model: registration, fp16 defaults, safety checker, tutorial route
+PDIR="$SCRIPT_DIR/megamind-plugin"
+"$PY" - "$PDIR" <<'PYEOF' && ok "SD1.5 plugin model: handler registered, fp16 official checkpoint, safety checker kept" || bad "SD1.5 plugin model definition wrong"
+import json,sys,py_compile
+d=sys.argv[1]
+info=json.load(open(d+"/plugin_info.json"))
+assert "stable_diffusion_1_5" in json.dumps(info.get("model_handlers") or {}), info.get("model_handlers")
+py_compile.compile(d+"/models/stable_diffusion_1_5/sd15_handler.py", cfile="/tmp/mm_sd15_h.pyc", doraise=True)
+py_compile.compile(d+"/models/stable_diffusion_1_5/sd15_main.py", cfile="/tmp/mm_sd15_m.pyc", doraise=True)
+src=open(d+"/models/stable_diffusion_1_5/sd15_handler.py",encoding="utf-8").read()
+assert "afety" in src and "hecker" in src, "safety checker must be retained"
+assert "stable-diffusion-v1-5" in src + open(d+"/defaults/stable_diffusion_1_5.json").read(), "official HF repo required"
+PYEOF
+"$PY" - "$PDIR" <<'PYEOF' && ok "SD1.5 defaults: fp16-named non-quanto (bf16 forcing unreachable), 20-step Euler profile" || bad "SD1.5 defaults/profile wrong"
+import json,sys,os
+d=sys.argv[1]
+df=json.load(open(d+"/defaults/stable_diffusion_1_5.json"))
+s=json.dumps(df).lower()
+assert "fp16" in s and "quanto" not in s, "SD1.5 must be fp16-named non-quanto"
+pr=os.path.join(d,"profiles","stable_diffusion_1_5","Fast Euler 20 Steps.json")
+p=json.load(open(pr)); ps=json.dumps(p).lower()
+assert "euler" in ps and "20" in ps, p
+PYEOF
+grep -q '"stable_diffusion_1_5"' "$WORK/t1/megamind/wgp_config.template.json" \
+  && ok "template transformer_types registers stable_diffusion_1_5 (dropdown allowlist)" || bad "template missing stable_diffusion_1_5 in transformer_types"
+grep -q '384p' "$WORK/t1/megamind/MEGAMIND.md" && grep -q '512x512 (1:1)' "$WORK/t1/megamind/MEGAMIND.md" \
+  && ok "tutorial documents the verified manual 384p -> 512x512 (1:1) route" || bad "tutorial missing verified resolution route"
+if grep -qi 'preset' "$WORK/t1/megamind/MEGAMIND.md"; then bad "tutorial claims a 512 preset (must say the user sets it once)"; else ok "tutorial does not claim a 512 preset"; fi
+grep -q 'NOT been confirmed' "$WORK/t1/megamind/MEGAMIND.md" \
+  && ok "tutorial carries the unverified 30-minute image-timing caveat" || bad "tutorial missing honest timing caveat"
+grep -q 'stable-diffusion-v1-5/stable-diffusion-v1-5' "$WORK/t1/megamind/MEGAMIND.md" && grep -q 'OpenRAIL' "$WORK/t1/megamind/MEGAMIND.md" \
+  && ok "tutorial preserves SD 1.5 source URL and license attribution" || bad "tutorial missing SD 1.5 attribution"
+grep -q 'wan2gp-stable-diffusion-1-4' "$WORK/t1/megamind/MEGAMIND.md" \
+  && ok "tutorial credits the official WanGP plugin API reference" || bad "tutorial missing plugin API reference credit"
+
 cd "$SCRIPT_DIR"
 
 echo "== $PASS passed, $FAIL failed =="
