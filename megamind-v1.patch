@@ -1,0 +1,285 @@
+From 1c201f845ddee0a110b52a66aefbf2a07f6dbdb3 Mon Sep 17 00:00:00 2001
+From: Megamind <megamind@local>
+Date: Wed, 21 Oct 2026 11:22:44 +0530
+Subject: [PATCH] Megamind Studios: name, white/orange/black theme, curated
+ model selection, Windows setup
+
+---
+ megamind/MEGAMIND.md                 | 22 +++++++++++++++
+ megamind/apply_patch.sh              | 17 +++++++++++
+ megamind/curate_models.py            | 25 +++++++++++++++++
+ megamind/wgp_config.template.json    | 20 +++++++++++++
+ run_megamind_windows.bat             | 10 +++++++
+ setup_megamind_windows.bat           | 42 ++++++++++++++++++++++++++++
+ shared/gradio/ui_studio.py           | 11 +++++---
+ shared/gradio/ui_studio_megamind.css | 18 ++++++++++++
+ wgp.py                               |  6 ++--
+ 9 files changed, 164 insertions(+), 7 deletions(-)
+ create mode 100644 megamind/MEGAMIND.md
+ create mode 100755 megamind/apply_patch.sh
+ create mode 100644 megamind/curate_models.py
+ create mode 100644 megamind/wgp_config.template.json
+ create mode 100644 run_megamind_windows.bat
+ create mode 100644 setup_megamind_windows.bat
+ create mode 100644 shared/gradio/ui_studio_megamind.css
+
+diff --git a/megamind/MEGAMIND.md b/megamind/MEGAMIND.md
+new file mode 100644
+index 0000000..100cc96
+--- /dev/null
++++ b/megamind/MEGAMIND.md
+@@ -0,0 +1,22 @@
++# Megamind Studios - modification notice
++
++Megamind Studios is a modified copy of WanGP (https://github.com/deepbeepmeep/Wan2GP)
++by DeepBeepMeep, under the WanGP Community License 2.0 (see LICENSE.txt, unmodified).
++All upstream copyright, attribution and license notices are preserved, and the About
++tab credits are retained.
++
++Modifications (first applied 2026-10-21):
++
++1. Branding: browser title and main header read "Megamind Studios" (wgp.py).
++2. Theme: added a "megamind" UI theme (white background, orange accents, black text)
++   via shared/gradio/ui_studio.py and shared/gradio/ui_studio_megamind.css, set as
++   the default UI theme.
++3. Model selection: the displayed model list is curated to Wan 2.2 TI2V-5B (video),
++   Qwen Image 20B (image), Chatterbox (speech) and ACE-Step 1.5 (music) using
++   WanGP's own finetunes/*.json visibility mechanism (megamind/curate_models.py),
++   plus a first-run configuration seed (megamind/wgp_config.template.json).
++
++Intended use: internal studio/client content production tool. Not for resale,
++white-labeling, hosted/paid access or redistribution as a product - those remain
++restricted by the WanGP Community License 2.0. "Made with WanGP" credit is required
++for Direct Output Sales (license section 6).
+diff --git a/megamind/apply_patch.sh b/megamind/apply_patch.sh
+new file mode 100755
+index 0000000..07ad27e
+--- /dev/null
++++ b/megamind/apply_patch.sh
+@@ -0,0 +1,17 @@
++#!/usr/bin/env bash
++# Reapply the Megamind Studios v1 patch onto a fresh Wan2GP clone.
++# Pins the verified upstream commit; refuses to apply onto anything else.
++set -e
++PINNED_COMMIT=fdc63bd
++PINNED_SUBJECT="fixed audio continuity"
++if [ ! -d .git ] || [ ! -f wgp.py ]; then
++  echo "Run this inside a Wan2GP clone (git clone https://github.com/deepbeepmeep/Wan2GP)"; exit 1
++fi
++current=$(git rev-parse --short HEAD)
++if [ "$current" != "$PINNED_COMMIT" ]; then
++  echo "This patch is verified against Wan2GP commit $PINNED_COMMIT ('$PINNED_SUBJECT')."
++  echo "Current HEAD is $current. Run: git checkout $PINNED_COMMIT  (or review the patch manually)."
++  exit 1
++fi
++git apply --check "$(dirname "$0")/megamind-v1.patch" && git apply "$(dirname "$0")/megamind-v1.patch"
++echo "Megamind patch applied cleanly onto $PINNED_COMMIT."
+diff --git a/megamind/curate_models.py b/megamind/curate_models.py
+new file mode 100644
+index 0000000..cd5ed1c
+--- /dev/null
++++ b/megamind/curate_models.py
+@@ -0,0 +1,25 @@
++# Megamind Studios - model list curation.
++# Writes finetunes/<model_type>.json stubs {"model":{"visible":false}} for every
++# model in defaults/ that is not on the Megamind allowlist. Upstream-supported
++# mechanism: refresh_model_defs() in wgp.py merges these over the defaults and
++# displays only models whose model_def has "visible" != false.
++# Re-run after any WanGP upstream update (new defaults get hidden by default).
++import glob, json, os
++
++ALLOWLIST = {"ti2v_2_2", "qwen_image_20B", "chatterbox", "ace_step_v1_5"}
++# H3 (MiniMax) deliberately NOT included: its license restricts display of
++# outputs outside its territory (excludes US/EU/UK/SK) - pending owner decision.
++
++root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++os.makedirs(os.path.join(root, "finetunes"), exist_ok=True)
++written = kept = 0
++for path in glob.glob(os.path.join(root, "defaults", "*.json")):
++    model_type = os.path.basename(path)[:-5]
++    if model_type in ALLOWLIST:
++        kept += 1
++        continue
++    stub = os.path.join(root, "finetunes", model_type + ".json")
++    with open(stub, "w", encoding="utf-8") as f:
++        json.dump({"model": {"visible": False}}, f, indent=2)
++    written += 1
++print(f"Megamind curation: {written} models hidden, {kept} kept visible: {sorted(ALLOWLIST)}")
+diff --git a/megamind/wgp_config.template.json b/megamind/wgp_config.template.json
+new file mode 100644
+index 0000000..013e094
+--- /dev/null
++++ b/megamind/wgp_config.template.json
+@@ -0,0 +1,20 @@
++{
++    "attention_mode": "auto",
++    "transformer_types": [
++        "ti2v_2_2",
++        "qwen_image_20B",
++        "chatterbox",
++        "ace_step_v1_5"
++    ],
++    "transformer_quantization": "int8",
++    "text_encoder_quantization": "int8",
++    "save_path": "outputs",
++    "image_save_path": "outputs",
++    "metadata_type": "metadata",
++    "profile": 4,
++    "video_profile": 4,
++    "image_profile": 4,
++    "audio_profile": 3,
++    "UI_theme": "megamind",
++    "last_model_type": "ti2v_2_2"
++}
+\ No newline at end of file
+diff --git a/run_megamind_windows.bat b/run_megamind_windows.bat
+new file mode 100644
+index 0000000..1522f15
+--- /dev/null
++++ b/run_megamind_windows.bat
+@@ -0,0 +1,10 @@
++@echo off
++REM Megamind Studios - launch. Run setup_megamind_windows.bat once first.
++cd /d %~dp0
++if not exist venv\Scripts\python.exe (
++    echo [Megamind] Setup not done yet. Run setup_megamind_windows.bat first.
++    pause
++    exit /b 1
++)
++venv\Scripts\python wgp.py
++pause
+diff --git a/setup_megamind_windows.bat b/setup_megamind_windows.bat
+new file mode 100644
+index 0000000..64fd22c
+--- /dev/null
++++ b/setup_megamind_windows.bat
+@@ -0,0 +1,42 @@
++@echo off
++REM ============================================================
++REM  Megamind Studios - one-step Windows setup (GTX 10xx path)
++REM  Installs WanGP (upstream GTX 10xx documented path) and
++REM  applies the Megamind curation + first-run config.
++REM  Requires: Python 3.10.x on PATH, ~25 GB free disk.
++REM ============================================================
++cd /d %~dp0
++
++py -3.10 --version >nul 2>&1
++if errorlevel 1 (
++    echo [Megamind] Python 3.10 not found.
++    echo [Megamind] Install Python 3.10.9 from https://www.python.org/downloads/release/python-3109/
++    echo [Megamind] During install tick "Add python.exe to PATH", then rerun this file.
++    pause
++    exit /b 1
++)
++
++if not exist venv (
++    echo [Megamind] Creating virtual environment...
++    py -3.10 -m venv venv
++)
++call venv\Scripts\activate.bat
++
++echo [Megamind] Installing PyTorch 2.7.1 cu128 (GTX 10xx build)...
++pip install torch==2.7.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
++
++echo [Megamind] Installing WanGP requirements...
++pip install -r requirements.txt
++
++echo [Megamind] Applying Megamind model selection...
++python megamind\curate_models.py
++
++if not exist wgp_config.json (
++    echo [Megamind] Seeding first-run configuration...
++    copy megamind\wgp_config.template.json wgp_config.json >nul
++)
++
++echo.
++echo [Megamind] Setup complete. Start the studio with:  venv\Scripts\python wgp.py
++echo [Megamind] Then open the shown local address in your browser.
++pause
+diff --git a/shared/gradio/ui_studio.py b/shared/gradio/ui_studio.py
+index 5494571..ee176bf 100644
+--- a/shared/gradio/ui_studio.py
++++ b/shared/gradio/ui_studio.py
+@@ -7,17 +7,20 @@ from urllib.parse import quote
+ import gradio as gr
+ 
+ css_path = Path(__file__).with_name('ui_studio.css')
+-THEME_CHOICES = [('Blue Sky (Default)', 'default'), ('Classic Gradio', 'gradio'), ('Emerald', 'emerald'), ('Amethyst', 'amethyst'), ('Rose', 'rose')]
++THEME_CHOICES = [('Megamind (White/Orange)', 'megamind'), ('Blue Sky (Default)', 'default'), ('Classic Gradio', 'gradio'), ('Emerald', 'emerald'), ('Amethyst', 'amethyst'), ('Rose', 'rose')]
+ AZURE = gr.themes.colors.Color(name='azure', c50='#f1f7fc', c100='#d9ebfa', c200='#c2ddf5', c300='#91bce2', c400='#69a8df', c500='#357fc4', c600='#2b6ba8', c700='#205786', c800='#19466d', c900='#153956', c950='#10283e')
+-THEME_HUES = {'default': AZURE, 'emerald': 'emerald', 'amethyst': 'violet', 'rose': 'rose'}
++MEGAORANGE = gr.themes.colors.Color(name='megaorange', c50='#FEF6F0', c100='#FDE9DC', c200='#FBD0B4', c300='#F8B082', c400='#F4884A', c500='#F06414', c600='#D65410', c700='#B2440E', c800='#8A360C', c900='#6E2C0B', c950='#571F08')
++THEME_HUES = {'default': AZURE, 'emerald': 'emerald', 'amethyst': 'violet', 'rose': 'rose', 'megamind': MEGAORANGE}
+ 
+ 
+ def create_theme(name, **sizes):
+     if name == 'gradio':
+         return None
+-    theme = gr.themes.Soft(font=[gr.themes.Font('Verdana')], primary_hue=THEME_HUES[name], secondary_hue=AZURE if name == 'default' else 'indigo', neutral_hue='slate', **sizes)
++    theme = gr.themes.Soft(font=[gr.themes.Font('Verdana')], primary_hue=THEME_HUES[name], secondary_hue=AZURE if name == 'default' else (MEGAORANGE if name == 'megamind' else 'indigo'), neutral_hue='stone', **sizes)
+     if name == 'default':
+         theme.set(background_fill_primary='*neutral_50', slider_color_dark='*primary_400', checkbox_label_background_fill_selected='*primary_600')
++    if name == 'megamind':
++        theme.set(background_fill_primary='*neutral_50', background_fill_secondary='*neutral_100', slider_color_dark='*primary_400', checkbox_label_background_fill_selected='*primary_600', button_primary_background_fill='*primary_500', button_primary_text_color='white')
+     if name != 'default':
+         theme.name = name
+     return theme
+@@ -100,7 +103,7 @@ def style_config(config, theme):
+     css = css_path.read_text(encoding='utf8')
+     if isinstance(theme, gr.themes.Default):
+         css += '\n' + css_path.with_name('ui_studio_classic.css').read_text(encoding='utf8')
+-    elif theme.name in ('emerald', 'amethyst', 'rose'):
++    elif theme.name in ('emerald', 'amethyst', 'rose', 'megamind'):
+         css += '\n' + css_path.with_name(f'ui_studio_{theme.name}.css').read_text(encoding='utf8')
+     css += '\n' + '\n'.join(icon_css)
+     config['css'] = (config['css'] or '') + '\n' + re.sub(r'\.wangp-studio-[a-z0-9-]+', selector, css)
+diff --git a/shared/gradio/ui_studio_megamind.css b/shared/gradio/ui_studio_megamind.css
+new file mode 100644
+index 0000000..94e349e
+--- /dev/null
++++ b/shared/gradio/ui_studio_megamind.css
+@@ -0,0 +1,18 @@
++/* Megamind Studios theme (white/orange/black) - variable overrides for the WanGP studio palette. */
++.wangp-studio-scope {
++    --studio-surface: #ffffff;
++    --studio-input: #ffffff;
++    --studio-border: #F8B082;
++    --studio-label: #B2440E;
++    --studio-accent: #F06414;
++    --studio-soft: #FEF6F0;
++    --studio-button: #FDE9DC;
++    --studio-button-hover: #FBD0B4;
++    --studio-button-text: #8A360C;
++    --studio-disabled: #edf0f3;
++    --studio-disabled-text: #74808d;
++}
++
++/* Megamind: recolor remaining blue accents (Deepy launcher, model info trigger). */
++.chat__toggle-text { color: #8A360C !important; }
++.wangp-model-info-trigger { background: #FDE9DC !important; color: #B2440E !important; border-color: #F8B082 !important; }
+diff --git a/wgp.py b/wgp.py
+index 2b23320..be0e7f5 100644
+--- a/wgp.py
++++ b/wgp.py
+@@ -2731,7 +2731,7 @@ if not Path(config_load_filename).is_file():
+         "image_profile": profile_type.LowRAM_LowVRAM,
+         "audio_profile": 3,
+         "preload_model_policy": [],
+-        "UI_theme": "default",
++        "UI_theme": "megamind",
+         "floating_generate_button": True,
+         "checkpoints_paths": fl.default_checkpoints_paths,
+         "loras_root": DEFAULT_LORA_ROOT,
+@@ -14331,8 +14331,8 @@ def create_ui():
+     else:
+         stats_app = None
+ 
+-    with ui_studio.Blocks(css=css, js=js, theme=theme, title="WanGP", fill_width=True) as main:
+-        gr.Markdown(f'<div align=center><H1>Wan<SUP style="color: #2563eb;">GP</SUP> v{WanGP_version} <FONT SIZE=4>by <I>DeepBeepMeep</I></FONT> <FONT SIZE=3>') # (<A HREF='https://github.com/deepbeepmeep/Wan2GP'>Updates</A>)</FONT SIZE=3></H1></div>")
++    with ui_studio.Blocks(css=css, js=js, theme=theme, title="Megamind Studios", fill_width=True) as main:
++        gr.Markdown(f'<div align=center><H1><FONT style="color: #141414;">Megamind</FONT> <FONT style="color: #F06414;">Studios</FONT>') # (<A HREF='https://github.com/deepbeepmeep/Wan2GP'>Updates</A>)</FONT SIZE=3></H1></div>")
+         global model_list
+ 
+         tab_state = gr.State({ "tab_no":0 }) 
+-- 
+2.34.1
