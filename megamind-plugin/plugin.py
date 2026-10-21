@@ -38,14 +38,18 @@ body.mm-dark {
 body.mm-dark .wangp-model-info-description, body.mm-dark .gradio-container .wangp-model-info { color: #b8b2aa !important; }
 body.mm-dark .gradio-container .wangp-input-modes, body.mm-dark .gradio-container fieldset.wangp-input-modes { background: #1e1b22 !important; border-color: rgba(245,242,238,.12) !important; }
 body.mm-dark .gradio-container .wangp-input-modes label { background: transparent !important; color: #f5f2ee !important; }
-body.mm-dark .gradio-container .wangp-input-modes label:has(input:checked) { background: var(--mm-orange) !important; color: #fff !important; border-radius: 8px !important; }
+body .gradio-container .wangp-input-modes label:has(input:checked) { background: var(--mm-orange) !important; color: #fff !important; -webkit-text-fill-color: #fff !important; border-radius: 8px !important; }
+body.mm-dark .gradio-container .wangp-input-modes label:has(input:checked) { background: var(--mm-orange) !important; color: #fff !important; -webkit-text-fill-color: #fff !important; border-radius: 8px !important; }
 body.mm-dark .gradio-container .container > span { color: #f5f2ee !important; }
 body.mm-dark .gradio-container a, body.mm-dark .gradio-container a span { color: #f3833d !important; }
 body.mm-dark .gradio-container button.secondary, body.mm-dark .gradio-container button.lg.secondary, body.mm-dark .gradio-container button.sm.secondary { background: #1e1b22 !important; color: #f5f2ee !important; border-color: rgba(245,242,238,.22) !important; }
 /* Remap Gradio's default azure/indigo palettes to Megamind orange so every
    themed control (tabs, sliders, checkboxes, links) follows the brand. */
-:root, body.mm-dark {
+:root body, :root body.mm-dark {
   --color-accent: #f26d1a;
+  --button-secondary-text-color: #16130f;
+  --button-secondary-background-fill: #f5f2ee;
+  --button-secondary-background-fill-hover: #ece6de;
   --primary-50: #fdf1e7; --primary-100: #fce3cf; --primary-200: #f9c79f;
   --primary-300: #f6a566; --primary-400: #f3833d; --primary-500: #f26d1a;
   --primary-600: #d55a0e; --primary-700: #b04a0b; --primary-800: #8c3b09;
@@ -95,6 +99,45 @@ body.mm-dark #mm-header img { background:#fff; padding:6px 10px; }
 #mm-mode { position:fixed; top:14px; right:16px; z-index:9999; display:flex; align-items:center; gap:8px; padding:8px 16px; border-radius:999px; border:1.5px solid rgba(22,19,15,.15); background:var(--mm-paper); color:var(--mm-ink); font:600 13px/1 Verdana,sans-serif; cursor:pointer; box-shadow:0 2px 10px rgba(22,19,15,.12); }
 body.mm-dark #mm-mode { border-color:rgba(245,242,238,.25); }
 #mm-mode .dot { width:10px; height:10px; border-radius:50%; background:var(--mm-orange); }
+/* Contrast pass: kill inherited blue labels/borders and dark-mode white panels.
+   Higher-specificity selectors so WanGP/Gradio !important rules lose. */
+body .gradio-container .block label > span, body .gradio-container label.block-label > span, body .gradio-container .gr-form label span { color: var(--mm-ink) !important; -webkit-text-fill-color: var(--mm-ink) !important; }
+body .gradio-container label.float, body .gradio-container label.float span { color: var(--mm-ink) !important; -webkit-text-fill-color: var(--mm-ink) !important; border-color: rgba(22,19,15,.15) !important; }
+body.mm-dark .gradio-container label.float, body.mm-dark .gradio-container label.float span { color: #f5f2ee !important; -webkit-text-fill-color: #f5f2ee !important; border-color: rgba(245,242,238,.18) !important; }
+body .gradio-container button.sm.secondary.wangp-model-selector-tool, body .gradio-container button.wangp-model-selector-tool { color: var(--mm-ink) !important; -webkit-text-fill-color: var(--mm-ink) !important; background: var(--mm-paper) !important; border-color: rgba(22,19,15,.18) !important; }
+body.mm-dark .gradio-container button.sm.secondary.wangp-model-selector-tool, body.mm-dark .gradio-container button.wangp-model-selector-tool { color: #f5f2ee !important; -webkit-text-fill-color: #f5f2ee !important; background: #1e1b22 !important; border-color: rgba(245,242,238,.22) !important; }
+body .gradio-container .tab-like-container { border-color: rgba(22,19,15,.12) !important; background: var(--mm-paper) !important; border-radius: 999px !important; padding: 4px !important; }
+body.mm-dark .gradio-container .tab-like-container { border-color: rgba(245,242,238,.12) !important; background: #1e1b22 !important; }
+body .gradio-container .tab-like-container button, body .gradio-container .tab-container button { border-radius: 999px !important; color: var(--mm-ink) !important; -webkit-text-fill-color: var(--mm-ink) !important; }
+body .gradio-container .tab-like-container button.selected, body .gradio-container .tab-container button.selected { background: var(--mm-ink) !important; color: var(--mm-paper) !important; -webkit-text-fill-color: var(--mm-paper) !important; }
+body.mm-dark .gradio-container .tab-like-container button { color: #f5f2ee !important; -webkit-text-fill-color: #f5f2ee !important; }
+body.mm-dark .gradio-container .tab-like-container button.selected, body.mm-dark .gradio-container .tab-container button.selected { background: var(--mm-orange) !important; color: #fff !important; -webkit-text-fill-color: #fff !important; }
+body.mm-dark .gradio-container .gr-group, body.mm-dark .gradio-container .styler, body.mm-dark .gradio-container .form, body.mm-dark .gradio-container .wangp-prompt-enhancer-row, body.mm-dark .gradio-container .wrap-inner { background: #1e1b22 !important; border-color: rgba(245,242,238,.10) !important; }
+body .gradio-container .gr-group, body .gradio-container .styler, body .gradio-container .form, body .gradio-container .wangp-prompt-enhancer-row, body .gradio-container .wrap-inner { background: var(--mm-paper) !important; border-color: rgba(22,19,15,.08) !important; }
+/* Visible keyboard focus everywhere (brand ring) */
+.gradio-container :focus-visible { outline: 2px solid var(--mm-orange) !important; outline-offset: 2px !important; border-radius: 8px; }
+/* WanGP studio palette -> Megamind (overrides #component-0 ID-level defs) */
+body .gradio-container.gradio-container .contain #component-0, body .gradio-container #component-0, body #component-0 {
+  --studio-surface: #ffffff; --studio-input: #ffffff;
+  --studio-border: rgba(22,19,15,.18); --studio-label: #16130f;
+  --studio-accent: #f26d1a; --studio-soft: #f5f2ee;
+  --studio-button: #f5f2ee; --studio-button-hover: #ece6de;
+  --studio-button-text: #16130f;
+  --studio-disabled: #ece6de; --studio-disabled-text: #8a837a;
+  --button-secondary-text-color: #16130f;
+}
+body.mm-dark .gradio-container.gradio-container .contain #component-0, body.mm-dark .gradio-container #component-0, body.mm-dark #component-0 {
+  --button-secondary-text-color: #f5f2ee;
+  --button-secondary-background-fill: #232028;
+  --button-secondary-background-fill-hover: #2a2630;
+  --studio-surface: #1e1b22; --studio-input: #17151a;
+  --studio-border: rgba(245,242,238,.18); --studio-label: #f5f2ee;
+  --studio-accent: #f3833d; --studio-soft: #232028;
+  --studio-button: #232028; --studio-button-hover: #2a2630;
+  --studio-button-text: #f5f2ee;
+  --studio-disabled: #232028; --studio-disabled-text: #8a837a;
+  --button-secondary-text-color: #f5f2ee;
+}
 `;
 function stripGradioDark(){
   [document.body,document.documentElement].forEach(function(el){ if(el) el.classList.remove("dark"); });
