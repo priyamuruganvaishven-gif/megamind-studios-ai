@@ -34,9 +34,12 @@ git checkout %PINNED% >nul 2>&1
 if errorlevel 1 ( echo [Megamind] Could not check out %PINNED%. Report this to Megamind support. & pause & exit /b 1 )
 
 echo [Megamind] Applying the Megamind patch...
-findstr /C:"megamind_dark_lock_v2" shared\gradio\ui_studio.py >nul 2>&1 && echo [Megamind] Latest Megamind patch already applied - skipping.
-findstr /C:"megamind_dark_lock_v2" shared\gradio\ui_studio.py >nul 2>&1 || ( del /q shared\gradio\ui_studio_megamind.css 2>nul & rmdir /s /q megamind 2>nul & del /q run_megamind_windows.bat 2>nul & git reset --hard %PINNED% >nul 2>&1 & git apply "%~dp0megamind-v1.patch" )
+set MM_APPLY=1
+if exist megamind\ensure_config.py findstr /C:"megamind_dark_lock_v2" shared\gradio\ui_studio.py >nul 2>&1 && set MM_APPLY=0
+if %MM_APPLY%==0 echo [Megamind] Latest Megamind patch already applied - skipping.
+if %MM_APPLY%==1 ( del /q shared\gradio\ui_studio_megamind.css 2>nul & rmdir /s /q megamind 2>nul & del /q run_megamind_windows.bat 2>nul & git reset --hard %PINNED% >nul 2>&1 & git apply "%~dp0megamind-v1.patch" )
 findstr /C:"megamind_dark_lock_v2" shared\gradio\ui_studio.py >nul 2>&1 || ( echo [Megamind] Patch update failed. Report this to Megamind support. & pause & exit /b 1 )
+if not exist megamind\ensure_config.py ( echo [Megamind] Patch update failed. Report this to Megamind support. & pause & exit /b 1 )
 findstr /C:"Megamind Studios" wgp.py >nul || ( echo [Megamind] Patch verification failed. Report this to Megamind support. & pause & exit /b 1 )
 
 if not exist venv %PYLAUNCH% -m venv venv
@@ -57,7 +60,8 @@ if errorlevel 1 ( echo [Megamind] Requirements install failed. Rerun this file t
 echo [Megamind] Applying Megamind model selection...
 python megamind\curate_models.py
 
-if not exist wgp_config.json copy megamind\wgp_config.template.json wgp_config.json >nul
+python megamind\ensure_config.py
+if errorlevel 1 ( echo [Megamind] Config update failed. Report this to Megamind support. & pause & exit /b 1 )
 
 if not exist "%WAN2GP_DIR%\run_megamind_windows.bat" ( echo [Megamind] Launcher missing - patch did not apply fully. Rerun this file. & pause & exit /b 1 )
 
