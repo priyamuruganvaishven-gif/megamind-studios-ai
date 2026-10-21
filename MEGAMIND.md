@@ -5,9 +5,12 @@ by DeepBeepMeep, under the WanGP Community License 2.0 (see LICENSE.txt, unmodif
 All upstream copyright, attribution and license notices are preserved, and the About
 tab credits are retained.
 
-Modifications (first applied 2026-10-21):
+Modifications (first applied 2026-10-21, updated 2026-10-21):
 
-1. Branding: browser title and main header read "Megamind Studios" (wgp.py).
+1. Branding: browser title reads "Megamind Studios" and the main header shows the
+   Megamind Studios logo image (wgp.py). The theme is locked to the light
+   white/orange/black design even when Windows/browser dark mode is on
+   (shared/gradio/ui_studio.py, shared/gradio/ui_studio_megamind.css).
 2. Theme: added a "megamind" UI theme (white background, orange accents, black text)
    via shared/gradio/ui_studio.py and shared/gradio/ui_studio_megamind.css, set as
    the default UI theme.
