@@ -50,12 +50,7 @@ pip install "typing-extensions>=4.10"
 REM typing-extensions preinstalled from PyPI: the cu128 index carries it as
 REM sdist-only and lacks its build backend, which breaks the torch install.
 echo [Megamind] Installing PyTorch 2.7.1 cu128 ^(GTX 10xx build^)...
-REM Stable cu128 wheels dropped Pascal (sm_61) kernels; WanGP's documented
-REM GTX 10xx path uses the cu128 TEST index. The arch check below catches
-REM an existing wrong-index torch (pip would skip it as already installed)
-REM and force-reinstalls a build that actually has sm_61 kernels.
-python -c "import torch,sys; sys.exit(0 if 'sm_61' in torch.cuda.get_arch_list() else 1)" 2>nul
-if errorlevel 1 ( pip install --force-reinstall torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/test/cu128 ) else ( echo [Megamind] PyTorch 2.7.1 with Pascal support already present - skipping. )
+pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 if errorlevel 1 ( echo [Megamind] PyTorch install failed. Check your internet connection and rerun. & pause & exit /b 1 )
 
 echo [Megamind] Installing WanGP requirements ^(excluding unused torchcodec - see header^)...
