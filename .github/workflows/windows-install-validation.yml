@@ -19,13 +19,14 @@ jobs:
           if not exist Wan2GP\venv\Scripts\python.exe (echo MISSING venv & exit /b 1)
           if not exist Wan2GP\wgp_config.json (echo MISSING config & exit /b 1)
           if not exist Wan2GP\run_megamind_windows.bat (echo MISSING run bat & exit /b 1)
-          findstr /C:"\"megamind\"" Wan2GP\wgp_config.json >nul || (echo config not megamind & exit /b 1)
+          findstr /C:"\"megamind\"" Wan2GP\wgp_config.json >nul || (echo megamind plugin not enabled in config & exit /b 1)
 
-      - name: Verify Megamind patch content
+      - name: Verify Megamind add-on content
         shell: cmd
         run: |
-          findstr /C:"Megamind Studios" Wan2GP\wgp.py >nul || (echo header patch missing & exit /b 1)
-          if not exist Wan2GP\shared\gradio\ui_studio_megamind.css (echo MISSING theme css & exit /b 1)
+          if not exist Wan2GP\plugins\megamind\plugin.py (echo MISSING branding plugin & exit /b 1)
+          if not exist Wan2GP\plugins\megamind\plugin_info.json (echo MISSING plugin info & exit /b 1)
+          if exist Wan2GP\shared\gradio\ui_studio_megamind.css (echo STALE theme css present & exit /b 1)
           Wan2GP\venv\Scripts\python.exe Wan2GP\megamind\curate_models.py
 
       - name: Verify curated model count
