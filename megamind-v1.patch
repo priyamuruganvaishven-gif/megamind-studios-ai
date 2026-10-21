@@ -1,9 +1,9 @@
 diff --git a/megamind/MEGAMIND.md b/megamind/MEGAMIND.md
 new file mode 100644
-index 0000000..6880eb2
+index 0000000..7280bc9
 --- /dev/null
 +++ b/megamind/MEGAMIND.md
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,83 @@
 +# Megamind Studios - modification notice
 +
 +Megamind Studios is a copy of WanGP (https://github.com/deepbeepmeep/Wan2GP)
@@ -22,8 +22,9 @@ index 0000000..6880eb2
 +   navigation with an obvious active state. The plugin uses WanGP's own plugin
 +   API (custom JS/CSS); it changes appearance only and does not alter generation,
 +   models or settings.
-+2. Model selection: the displayed model list is curated to Wan 2.2 TI2V-5B (video),
-+   Qwen Image 20B (image), Chatterbox (speech) and ACE-Step 1.5 (music) using
++2. Model selection: the displayed model list is curated to Wan 2.1 T2V-1.3B
++   (video), FLUX.2 Klein 4B (image), Chatterbox (speech) and ACE-Step 1.5
++   (music) - the smallest WanGP option in each category - using
 +   WanGP's own finetunes/*.json visibility mechanism (megamind/curate_models.py),
 +   plus a first-run configuration seed and existing-install migration
 +   (megamind/wgp_config.template.json, megamind/ensure_config.py). The migration
@@ -51,18 +52,36 @@ index 0000000..6880eb2
 +Per-model checkpoint actually downloaded with Int8 (verified against the
 +pinned upstream defaults/*.json):
 +
-+- Wan 2.2 TI2V-5B: wan2.2_text2video_5B_quanto_mbf16_int8.safetensors
-+  (DeepBeepMeep/Wan2.2)
-+- Qwen Image 20B: qwen_image_20B_quanto_bf16_int8.safetensors
-+  (DeepBeepMeep/Qwen_image)
++- Wan 2.1 T2V-1.3B: wan2.1_text2video_1.3B_mbf16.safetensors - 1.3B is small
++  enough to run unquantized (WanGP auto-switches compute to FP16 on Pascal);
++  no int8 variant exists for it. Shares the umt5-xxl int8 text encoder
++  (6.73 GB) with the other Wan video models (DeepBeepMeep/Wan2.1).
++- FLUX.2 Klein 4B: flux-2-klein-4b_quanto_bf16_int8.safetensors plus its
++  qwen3_quanto_bf16_int8.safetensors text encoder (DeepBeepMeep/Flux2,
++  DeepBeepMeep/Z-Image). Distilled: 4 inference steps by default.
 +- ACE-Step 1.5 Turbo 2B: ace_step_v1_5_transformer_quanto_bf16_int8.safetensors
 +  (DiT-only build, no LM stage)
 +- Chatterbox: t3_mtl23ls_v2.safetensors (small single file, no quant needed)
 +
-+Expectations on 6GB: Wan 2.2 TI2V-5B is the comfortable model (WanGP's
-+low-VRAM flagship). Qwen Image 20B runs through WanGP's layer streaming but
-+is slow on 6GB; lower the resolution if VRAM runs out. Generation speed was
-+not tested on the target GPU (no GPU in the build environment).
++PyTorch for GTX 10xx: 2.7.1 from the cu128 TEST index
++(download.pytorch.org/whl/test/cu128) - the stable cu128 wheels dropped the
++Pascal (sm_61) kernels. setup_megamind_windows.bat checks
++torch.cuda.get_arch_list() for sm_61 and force-reinstalls from the right
++index when missing. If generation still fails with "no kernel image is
++available for execution on the device", install the same pins from
++https://download.pytorch.org/whl/cu126 instead.
++
++Expectations on 6GB (30-minute per-generation target): the four curated
++models are the smallest WanGP options in their category. Generation speed
++and memory fit were NOT tested on the target GPU (no GPU in the build
++environment) - treat the first run of each model as a timed test and abort
++any run that passes 30 minutes. For Wan 2.1 1.3B video, WanGP's docs
++recommend 832x480, 49 frames, 20 steps as first settings; if that is too
++slow on this card, drop to 33 frames / 15 steps before dropping resolution.
++Wan 2.1 1.3B is text-to-video only. The earlier defaults (Wan 2.2 TI2V-5B,
++Qwen Image 20B) are hidden by the curation update but never deleted:
++already-downloaded checkpoints stay on disk and the models can be re-added
++by removing their finetunes/*.json hiding stubs.
 +
 +Intended use: internal studio/client content production tool. Not for resale,
 +white-labeling, hosted/paid access or redistribution as a product - those remain
@@ -70,10 +89,10 @@ index 0000000..6880eb2
 +for Direct Output Sales (license section 6).
 diff --git a/megamind/curate_models.py b/megamind/curate_models.py
 new file mode 100644
-index 0000000..cd5ed1c
+index 0000000..4ba5de9
 --- /dev/null
 +++ b/megamind/curate_models.py
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,28 @@
 +# Megamind Studios - model list curation.
 +# Writes finetunes/<model_type>.json stubs {"model":{"visible":false}} for every
 +# model in defaults/ that is not on the Megamind allowlist. Upstream-supported
@@ -82,7 +101,7 @@ index 0000000..cd5ed1c
 +# Re-run after any WanGP upstream update (new defaults get hidden by default).
 +import glob, json, os
 +
-+ALLOWLIST = {"ti2v_2_2", "qwen_image_20B", "chatterbox", "ace_step_v1_5"}
++ALLOWLIST = {"t2v_1.3B", "flux2_klein_4b", "chatterbox", "ace_step_v1_5"}
 +# H3 (MiniMax) deliberately NOT included: its license restricts display of
 +# outputs outside its territory (excludes US/EU/UK/SK) - pending owner decision.
 +
@@ -92,6 +111,9 @@ index 0000000..cd5ed1c
 +for path in glob.glob(os.path.join(root, "defaults", "*.json")):
 +    model_type = os.path.basename(path)[:-5]
 +    if model_type in ALLOWLIST:
++        stale = os.path.join(root, "finetunes", model_type + ".json")
++        if os.path.exists(stale):
++            os.remove(stale)
 +        kept += 1
 +        continue
 +    stub = os.path.join(root, "finetunes", model_type + ".json")
@@ -101,10 +123,10 @@ index 0000000..cd5ed1c
 +print(f"Megamind curation: {written} models hidden, {kept} kept visible: {sorted(ALLOWLIST)}")
 diff --git a/megamind/ensure_config.py b/megamind/ensure_config.py
 new file mode 100644
-index 0000000..2d6f805
+index 0000000..c6b575c
 --- /dev/null
 +++ b/megamind/ensure_config.py
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,86 @@
 +# Megamind Studios - existing-install config migration for GTX 10xx.
 +# Runs on every setup (setup_megamind_windows.bat), after curate_models.py.
 +# Seeds wgp_config.json from the template when absent, then enforces only
@@ -160,6 +182,14 @@ index 0000000..2d6f805
 +    cfg["transformer_types"] = list(allow)
 +    changed.append("transformer_types -> curated allowlist")
 +
++# If the saved current model fell out of the curated list (e.g. after a
++# curation update), move it to the template default so the dropdown never
++# points at a hidden model.
++if cfg.get("last_model_type") not in allow:
++    prev = cfg.get("last_model_type")
++    cfg["last_model_type"] = tmpl.get("last_model_type")
++    changed.append("last_model_type: %r -> %r" % (prev, cfg["last_model_type"]))
++
 +
 +# Plugin conversion: the Megamind branding now ships as a WanGP plugin
 +# (plugins/megamind), not a patched-in theme. Migrate a stale "megamind"
@@ -185,15 +215,15 @@ index 0000000..2d6f805
 +    print("Megamind config: already configured for GTX 10xx - no changes")
 diff --git a/megamind/wgp_config.template.json b/megamind/wgp_config.template.json
 new file mode 100644
-index 0000000..9470904
+index 0000000..d59c78c
 --- /dev/null
 +++ b/megamind/wgp_config.template.json
 @@ -0,0 +1,24 @@
 +{
 +    "attention_mode": "auto",
 +    "transformer_types": [
-+        "ti2v_2_2",
-+        "qwen_image_20B",
++        "t2v_1.3B",
++        "flux2_klein_4b",
 +        "chatterbox",
 +        "ace_step_v1_5"
 +    ],
@@ -207,7 +237,7 @@ index 0000000..9470904
 +    "image_profile": 4,
 +    "audio_profile": 3,
 +    "UI_theme": "default",
-+    "last_model_type": "ti2v_2_2",
++    "last_model_type": "t2v_1.3B",
 +    "enabled_plugins": [
 +        "motion_designer",
 +        "megamind"
