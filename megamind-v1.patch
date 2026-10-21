@@ -1,9 +1,9 @@
 diff --git a/megamind/MEGAMIND.md b/megamind/MEGAMIND.md
 new file mode 100644
-index 0000000..778d421
+index 0000000..00bf44e
 --- /dev/null
 +++ b/megamind/MEGAMIND.md
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,59 @@
 +# Megamind Studios - modification notice
 +
 +Megamind Studios is a modified copy of WanGP (https://github.com/deepbeepmeep/Wan2GP)
@@ -23,7 +23,8 @@ index 0000000..778d421
 +3. Model selection: the displayed model list is curated to Wan 2.2 TI2V-5B (video),
 +   Qwen Image 20B (image), Chatterbox (speech) and ACE-Step 1.5 (music) using
 +   WanGP's own finetunes/*.json visibility mechanism (megamind/curate_models.py),
-+   plus a first-run configuration seed (megamind/wgp_config.template.json).
++   plus a first-run configuration seed and existing-install migration
++   (megamind/wgp_config.template.json, megamind/ensure_config.py).
 +
 +
 +Hardware configuration: GTX 1060 6GB (Pascal)
@@ -93,6 +94,73 @@ index 0000000..cd5ed1c
 +        json.dump({"model": {"visible": False}}, f, indent=2)
 +    written += 1
 +print(f"Megamind curation: {written} models hidden, {kept} kept visible: {sorted(ALLOWLIST)}")
+diff --git a/megamind/ensure_config.py b/megamind/ensure_config.py
+new file mode 100644
+index 0000000..e74515c
+--- /dev/null
++++ b/megamind/ensure_config.py
+@@ -0,0 +1,61 @@
++# Megamind Studios - existing-install config migration for GTX 10xx.
++# Runs on every setup (setup_megamind_windows.bat), after curate_models.py.
++# Seeds wgp_config.json from the template when absent, then enforces only
++# the GTX 10xx fields the user asked to preconfigure: Int8 quantization
++# (fp8 has no Pascal hardware support; "bf16" = no quantization pulls the
++# full-size checkpoints), low-VRAM memory profiles, auto attention and the
++# curated model allowlist. Every other setting (save paths, resolutions,
++# per-model choices, extensions) is preserved. Safe to re-run: idempotent.
++import json, os, shutil, sys
++
++root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++config_path = os.path.join(root, "wgp_config.json")
++template_path = os.path.join(root, "megamind", "wgp_config.template.json")
++
++if not os.path.exists(config_path):
++    shutil.copyfile(template_path, config_path)
++    print("Megamind config: seeded wgp_config.json from template")
++    sys.exit(0)
++
++with open(config_path, "r", encoding="utf-8") as f:
++    cfg = json.load(f)
++with open(template_path, encoding="utf-8") as f:
++    tmpl = json.load(f)
++changed = []
++
++def enforce(key, want, predicate):
++    cur = cfg.get(key)
++    if predicate(cur):
++        cfg[key] = want
++        changed.append("%s: %r -> %r" % (key, cur, want))
++
++# Int8 is the only quantization with GTX 10xx hardware support.
++for key in ("transformer_quantization", "text_encoder_quantization"):
++    enforce(key, "int8", lambda v: v != "int8")
++
++# 6GB VRAM needs a LowVRAM profile for video/image: keep 4/4.5/5, replace
++# missing or high-VRAM values (1/2/3) with upstream-recommended 4.
++def needs_low_vram(v):
++    return not isinstance(v, (int, float)) or isinstance(v, bool) or v < 4
++for key in ("profile", "video_profile", "image_profile"):
++    enforce(key, 4, needs_low_vram)
++
++# Audio: upstream-recommended profile 3; only fill when missing.
++enforce("audio_profile", 3, lambda v: v is None)
++
++# Attention: auto resolves to sdpa on Pascal.
++enforce("attention_mode", "auto", lambda v: v is None)
++
++# Curated model allowlist (union-safe: replace only if the 4 are not all present).
++allow = tmpl["transformer_types"]
++cur = cfg.get("transformer_types")
++if not isinstance(cur, list) or not set(allow).issubset(set(cur)):
++    cfg["transformer_types"] = list(allow)
++    changed.append("transformer_types -> curated allowlist")
++
++if changed:
++    with open(config_path, "w", encoding="utf-8") as f:
++        json.dump(cfg, f, indent=4)
++    print("Megamind config: updated for GTX 10xx - " + "; ".join(changed))
++else:
++    print("Megamind config: already configured for GTX 10xx - no changes")
 diff --git a/megamind/wgp_config.template.json b/megamind/wgp_config.template.json
 new file mode 100644
 index 0000000..013e094
