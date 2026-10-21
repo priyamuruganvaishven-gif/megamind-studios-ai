@@ -43,25 +43,27 @@ fresh "$WORK/t3" && cd "$WORK/t3" && git checkout -q -f $PINNED
 if bash "$APPLY_SH" "$PATCH" >/dev/null 2>&1 && [ -f megamind/ensure_config.py ]; then ok "apply_patch.sh applies onto $PINNED"; else bad "apply_patch.sh failed onto $PINNED"; fi
 
 # 4. Curation on the patched tree: 268 hidden, exactly 4 visible
-cd "$WORK/t1" && rm -rf finetunes && mkdir -p finetunes && "$PY" megamind/curate_models.py >/dev/null
+cd "$WORK/t1" && rm -rf finetunes && mkdir -p finetunes
+echo '{"model":{"visible":false}}' > finetunes/t2v_1.3B.json   # stale stub from the pre-switch curation
+"$PY" megamind/curate_models.py >/dev/null
 missing=0; visible=0
 for f in defaults/*.json; do
   mt=$(basename "$f" .json); stub="finetunes/$mt.json"
-  case "$mt" in ti2v_2_2|qwen_image_20B|chatterbox|ace_step_v1_5)
+  case "$mt" in t2v_1.3B|flux2_klein_4b|chatterbox|ace_step_v1_5)
     [ -f "$stub" ] && bad "allowlisted $mt got a hiding stub" || visible=$((visible+1));;
   *) { [ -f "$stub" ] && grep -q '"visible": false' "$stub"; } || { missing=$((missing+1)); bad "stub missing: $mt"; };;
   esac
 done
-[ "$missing" = 0 ] && [ "$visible" = 4 ] && ok "curation: all non-curated hidden, exactly 4 visible" || bad "curation wrong: $missing missing stubs, $visible visible"
+[ "$missing" = 0 ] && [ "$visible" = 4 ] && ok "curation: all non-curated hidden, exactly 4 visible, stale allowlisted stub removed" || bad "curation wrong: $missing missing stubs, $visible visible"
 
 # 5. Config template: valid JSON, allowlist, megamind theme, ti2v_2_2 default
 "$PY" - "$WORK/t1" <<'PYEOF' && ok "wgp_config.template.json valid" || bad "config template invalid"
 import json,sys
 c=json.load(open(sys.argv[1]+"/megamind/wgp_config.template.json"))
-assert c.get("transformer_types")==["ti2v_2_2","qwen_image_20B","chatterbox","ace_step_v1_5"]
+assert c.get("transformer_types")==["t2v_1.3B","flux2_klein_4b","chatterbox","ace_step_v1_5"]
 assert c.get("UI_theme")=="default", "megamind theme is gone (plugin replaced it); template must seed default"
 assert c.get("enabled_plugins")==["motion_designer","megamind"]
-assert c.get("last_model_type")=="ti2v_2_2"
+assert c.get("last_model_type")=="t2v_1.3B"
 PYEOF
 
 # 6. Patch is add-only: no upstream file is modified (plugin replaced all core edits)
@@ -95,6 +97,8 @@ g 'xcopy /E /I /Y "%~dp0megamind-plugin"' && grep -qF 'plugins\megamind\plugin.p
   && ok "setup.bat installs the branding plugin (xcopy + verify)" || bad "setup.bat missing plugin install"
 g "pip install --upgrade pip" && g 'typing-extensions>=4.10' \
   && ok "setup.bat pre-installs typing-extensions from PyPI (cu128 index sdist trap, found by CI run 2)" || bad "setup.bat missing typing-extensions pre-install"
+g "whl/test/cu128" && g "sm_61" && grep -qF -- "--force-reinstall" "$SB" \
+  && ok "setup.bat installs Pascal-kernel torch (test/cu128 index + sm_61 arch check + force-reinstall)" || bad "setup.bat torch line not Pascal-safe"
 if grep -q "^echo @echo off>" "$SB"; then bad "setup.bat overwrites the guarded launcher"; else ok "setup.bat preserves the guarded launcher"; fi
 
 # 9. Final installed launcher is the guarded one from the patch
@@ -139,15 +143,15 @@ assert c.get("audio_profile")==3, "LowRAM_HighVRAM profile 3 is upstream-recomme
 PYEOF
 
 # 13. Curated models ship Pascal-runnable quant artifacts in pinned upstream (no fp8-only models)
-"$PY" - "$WORK/t1" <<'PYEOF' && ok "curated models have int8 quanto artifacts, none fp8-only" || bad "curated model quant artifacts wrong"
+"$PY" - "$WORK/t1" <<'PYEOF' && ok "curated model artifacts Pascal-runnable (1.3B plain, klein/ace int8), none fp8-only" || bad "curated model quant artifacts wrong"
 import json,sys
 d=sys.argv[1]+"/defaults/"
 def urls(f): return json.load(open(d+f)).get("model",{}).get("URLs",[])
-ti=urls("ti2v_2_2.json");       assert any("quanto" in u and "int8" in u for u in ti), ti
-qi=urls("qwen_image_20B.json"); assert any("quanto" in u and "int8" in u for u in qi), qi
+t1=urls("t2v_1.3B.json");     assert len(t1)==1 and "1.3B" in t1[0], t1  # 1.3B runs unquantized FP16 on Pascal; no int8 variant exists
+kl=urls("flux2_klein_4b.json"); assert any("quanto" in u and "int8" in u for u in kl), kl
 ace=urls("ace_step_v1_5.json"); assert any("quanto" in u and "int8" in u for u in ace), ace
 cb=urls("chatterbox.json");     assert len(cb)==1, cb
-for name,u in [("ti2v_2_2",ti),("qwen_image_20B",qi),("ace_step_v1_5",ace),("chatterbox",cb)]:
+for name,u in [("t2v_1.3B",t1),("flux2_klein_4b",kl),("ace_step_v1_5",ace),("chatterbox",cb)]:
     assert not all("fp8" in x for x in u), name+" is fp8-only - not Pascal-runnable"
 PYEOF
 
@@ -169,7 +173,7 @@ run = lambda: subprocess.run([sys.executable, "megamind/ensure_config.py"], cwd=
 cfgp = os.path.join(work, "wgp_config.json")
 r = run(); assert r.returncode == 0 and os.path.exists(cfgp), r.stderr
 c = json.load(open(cfgp)); assert c["transformer_quantization"] == "int8" and c["profile"] == 4
-c.update({"transformer_quantization": "fp8", "profile": 2, "image_profile": 1, "audio_profile": 5, "custom_key": "keep", "transformer_types": ["qwen_image_20B"], "UI_theme": "megamind", "enabled_plugins": ["motion_designer"]})
+c.update({"transformer_quantization": "fp8", "profile": 2, "image_profile": 1, "audio_profile": 5, "custom_key": "keep", "transformer_types": ["qwen_image_20B"], "last_model_type": "ti2v_2_2", "UI_theme": "megamind", "enabled_plugins": ["motion_designer"]})
 json.dump(c, open(cfgp, "w"))
 r = run(); assert r.returncode == 0, r.stderr
 c = json.load(open(cfgp))
@@ -177,7 +181,8 @@ assert c["transformer_quantization"] == "int8" and c["profile"] == 4 and c["imag
 assert c["audio_profile"] == 5 and c["custom_key"] == "keep"
 assert c["UI_theme"] == "default", "stale megamind theme must migrate to default"
 assert c["enabled_plugins"] == ["motion_designer", "megamind"], "existing plugins must be preserved"
-assert c["transformer_types"] == ["ti2v_2_2", "qwen_image_20B", "chatterbox", "ace_step_v1_5"]
+assert c["transformer_types"] == ["t2v_1.3B", "flux2_klein_4b", "chatterbox", "ace_step_v1_5"]
+assert c["last_model_type"] == "t2v_1.3B", "stale last_model_type must migrate to the template default"
 assert "megamind" in c["enabled_plugins"], "migration must enable the megamind plugin"
 r = run(); assert "no changes" in r.stdout, r.stdout
 c["profile"] = 4.5; json.dump(c, open(cfgp, "w"))
