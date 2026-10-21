@@ -88,6 +88,8 @@ g "where git" && g "py -3.10" && g "checkout %PINNED%" \
   && g 'requirements_megamind.txt' \
   && ok "setup.bat: git/python checks, pinned checkout, pinned torch stack, torchcodec excluded (documented)" || bad "setup.bat missing required logic"
 if grep -q "torchcodec==0.5.0" "$SB"; then bad "setup.bat pins torchcodec 0.5.0 (no Windows wheel exists)"; else ok "setup.bat has no unshippable torchcodec pin"; fi
+g "pip install --upgrade pip" && g 'typing-extensions>=4.10' \
+  && ok "setup.bat pre-installs typing-extensions from PyPI (cu128 index sdist trap, found by CI run 2)" || bad "setup.bat missing typing-extensions pre-install"
 if grep -q "^echo @echo off>" "$SB"; then bad "setup.bat overwrites the guarded launcher"; else ok "setup.bat preserves the guarded launcher"; fi
 
 # 9. Final installed launcher is the guarded one from the patch
